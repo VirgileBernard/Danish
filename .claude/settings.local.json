@@ -8,7 +8,11 @@
       "Bash(npx tailwindcss:*)",
       "Bash(node -e \"require\\('@types/node'\\)\")",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(node:*)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }
