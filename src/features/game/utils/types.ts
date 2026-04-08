@@ -26,12 +26,21 @@ export interface Player {
 }
 
 export interface TurnContext {
-  mustPlayDouble: boolean;        // Jack rule
-  mustFollowSuit: string | null;  // "hearts" | null — 6 rule
-  mustPlayBelow7: boolean;        // 7 rule (<=7, inclusive)
-  lastEffectiveCard: Card | null; // for chained 3s
-  skippedPlayers: number;         // multiple 8s skip multiple players
-  attackTarget: string | null;    // player id targeted by Ace
+  mustPlayDouble: boolean;           // Jack rule
+  mustFollowSuit: string | null;     // "hearts" | null — 6 rule
+  mustFollowAboveValue: number | null; // value to beat when mustFollowSuit is active
+  mustPlayBelow7: boolean;           // 7 rule (<=7, inclusive)
+  lastEffectiveCard: Card | null;    // for chained 3s
+  consecutiveSameValue: number;      // tracks 4-of-a-kind auto-cut detection
+  lastPlayedValue: number | null;    // value of last card played
+  skippedPlayers: number;            // multiple 8s skip multiple players
+  attackTarget: string | null;       // player id targeted by Ace
+}
+
+export interface RulesConfig {
+  // patriarchal (default): K=10, Q=9
+  // matriarchal: Q=10, K=9
+  mode: 'patriarchal' | 'matriarchal';
 }
 
 export interface GameState {
@@ -40,7 +49,9 @@ export interface GameState {
   currentPlayerIndex: number;
   deck: Card[];
   pile: Card[];
+  discard: Card[];
   turnContext: TurnContext;
+  config: RulesConfig;
   helperActive: boolean;
   validMoves: Card[];
   bestMove: Card | null;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { isValidPlay } from '@/features/game/utils/cardRules';
+import { isValidPlay, getEffectiveValue } from '@/features/game/utils/cardRules';
 import { createDeck } from '@/features/game/utils/deck';
-import type { Card, GameState, TurnContext } from '@/features/game/utils/types';
+import type { Card, GameState, TurnContext, RulesConfig } from '@/features/game/utils/types';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -18,8 +18,11 @@ function makeContext(overrides: Partial<TurnContext> = {}): TurnContext {
   return {
     mustPlayDouble: false,
     mustFollowSuit: null,
+    mustFollowAboveValue: null,
     mustPlayBelow7: false,
     lastEffectiveCard: null,
+    consecutiveSameValue: 0,
+    lastPlayedValue: null,
     skippedPlayers: 0,
     attackTarget: null,
     ...overrides,
@@ -30,15 +33,22 @@ function makeContext(overrides: Partial<TurnContext> = {}): TurnContext {
  * Builds a minimal GameState.
  * @param pile     Cards currently on the pile (empty = pile was cut by 10 or game start).
  * @param context  TurnContext overrides — everything else defaults to "no active rule".
+ * @param config   RulesConfig override — defaults to patriarchal.
  */
-function makeState(pile: Card[] = [], context: Partial<TurnContext> = {}): GameState {
+function makeState(
+  pile: Card[] = [],
+  context: Partial<TurnContext> = {},
+  config: RulesConfig = { mode: 'patriarchal' },
+): GameState {
   return {
     phase: 'PLAYING',
     players: [],
     currentPlayerIndex: 0,
     deck: [],
     pile,
+    discard: [],
     turnContext: makeContext(context),
+    config,
     helperActive: false,
     validMoves: [],
     bestMove: null,
@@ -157,20 +167,41 @@ describe('card 8', () => {
 });
 
 // ── 10 ────────────────────────────────────────────────────────────────────
-// Value 99 — always playable, cuts the pile, overrides every active rule.
+// Value 99 — cuts the pile, overrides most constraints.
+// Exceptions: invalid after a 7, and invalid after a 6 of a different suit.
 
 describe('card 10', () => {
-  it('valid — overrides mustPlayBelow7 (would block any non-special card)', () => {
+  it('invalid — blocked by mustPlayBelow7 (10 cannot follow a 7)', () => {
     const nine = c('9');
     const state = makeState([nine], { mustPlayBelow7: true, lastEffectiveCard: nine });
-    expect(isValidPlay([c('10')], state)).toBe(true);
+    expect(isValidPlay([c('10')], state)).toBe(false);
   });
 
   it('invalid — Q (non-10) blocked by the same mustPlayBelow7 constraint', () => {
-    // Demonstrates what 10 uniquely bypasses
+    // Demonstrates the 7 rule blocks all high-value cards
     const five = c('5');
     const state = makeState([five], { mustPlayBelow7: true, lastEffectiveCard: five });
     expect(isValidPlay([c('Q')], state)).toBe(false);
+  });
+
+  it('valid — 10 of same suit after 6 of hearts', () => {
+    const sixH = c('6', 'hearts');
+    const state = makeState([sixH], {
+      mustFollowSuit: 'hearts',
+      mustFollowAboveValue: sixH.value,
+      lastEffectiveCard: sixH,
+    });
+    expect(isValidPlay([c('10', 'hearts')], state)).toBe(true);
+  });
+
+  it('invalid — 10 of different suit after 6 of hearts', () => {
+    const sixH = c('6', 'hearts');
+    const state = makeState([sixH], {
+      mustFollowSuit: 'hearts',
+      mustFollowAboveValue: sixH.value,
+      lastEffectiveCard: sixH,
+    });
+    expect(isValidPlay([c('10', 'spades')], state)).toBe(false);
   });
 });
 
@@ -233,5 +264,98 @@ describe('isValidPlay — edge cases', () => {
     // 2 has value 12 — no normal card can beat it, but 10 always can
     const state = makeState([two], { lastEffectiveCard: two });
     expect(isValidPlay([c('10')], state)).toBe(true);
+  });
+
+  it('valid — equal value card is allowed (>= comparison)', () => {
+    const eight = c('8');
+    const state = makeState([eight], { lastEffectiveCard: eight });
+    // 8 has value 5; playing another 8 (value 5) must be valid
+    expect(isValidPlay([c('8', 'spades')], state)).toBe(true);
+  });
+});
+
+// ── Six rule — special cards ───────────────────────────────────────────────
+
+describe('six rule — special card interactions', () => {
+  const sixH = (() => {
+    const found = deck.find(card => card.rank === '6' && card.suit === 'hearts');
+    if (!found) throw new Error('6h not found');
+    return found;
+  })();
+
+  function sixState(overrides: Partial<TurnContext> = {}) {
+    return makeState([sixH], {
+      mustFollowSuit: 'hearts',
+      mustFollowAboveValue: sixH.value,
+      lastEffectiveCard: sixH,
+      ...overrides,
+    });
+  }
+
+  it('valid — 2 of same suit after 6', () => {
+    expect(isValidPlay([c('2', 'hearts')], sixState())).toBe(true);
+  });
+
+  it('invalid — 2 of different suit after 6', () => {
+    expect(isValidPlay([c('2', 'spades')], sixState())).toBe(false);
+  });
+
+  it('valid — 3 of same suit after 6', () => {
+    expect(isValidPlay([c('3', 'hearts')], sixState())).toBe(true);
+  });
+
+  it('invalid — 3 of different suit after 6', () => {
+    expect(isValidPlay([c('3', 'spades')], sixState())).toBe(false);
+  });
+
+  it('valid — another 6 of any suit after 6', () => {
+    expect(isValidPlay([c('6', 'spades')], sixState())).toBe(true);
+  });
+});
+
+// ── RulesConfig — Q/K value modes ─────────────────────────────────────────
+
+describe('getEffectiveValue — patriarchal vs matriarchal', () => {
+  it('patriarchal: K has effective value 10', () => {
+    expect(getEffectiveValue(c('K'), { mode: 'patriarchal' })).toBe(10);
+  });
+
+  it('patriarchal: Q has effective value 9', () => {
+    expect(getEffectiveValue(c('Q'), { mode: 'patriarchal' })).toBe(9);
+  });
+
+  it('matriarchal: Q has effective value 10', () => {
+    expect(getEffectiveValue(c('Q'), { mode: 'matriarchal' })).toBe(10);
+  });
+
+  it('matriarchal: K has effective value 9', () => {
+    expect(getEffectiveValue(c('K'), { mode: 'matriarchal' })).toBe(9);
+  });
+
+  it('patriarchal: playing Q (9) on K (10) is invalid', () => {
+    const king = c('K');
+    const state = makeState([king], { lastEffectiveCard: king }, { mode: 'patriarchal' });
+    expect(isValidPlay([c('Q')], state)).toBe(false);
+  });
+
+  it('matriarchal: playing Q (10) on K (9) is valid', () => {
+    const king = c('K');
+    const state = makeState([king], { lastEffectiveCard: king }, { mode: 'matriarchal' });
+    expect(isValidPlay([c('Q')], state)).toBe(true);
+  });
+});
+
+// ── 4-of-a-kind — isValidPlay does not block the 4th play ─────────────────
+
+describe('4-of-a-kind auto-cut', () => {
+  it('valid — 4th consecutive same-value card is not blocked by isValidPlay', () => {
+    // consecutiveSameValue tracks the count; the cut is applied in applyPlay, not here.
+    const seven = c('7');
+    const state = makeState([seven], {
+      lastEffectiveCard: seven,
+      consecutiveSameValue: 3,
+      lastPlayedValue: seven.value,
+    });
+    expect(isValidPlay([c('7', 'spades')], state)).toBe(true);
   });
 });
