@@ -21,10 +21,10 @@ export function EmoteWheel({ onEmote }: Props) {
         😊
       </button>
       {open && (
-        <div className="absolute bottom-8 left-0 grid grid-cols-2 gap-1 bg-black/80 rounded-lg p-2 z-20">
+        <div className="absolute bottom-8 left-0 grid grid-cols-2 gap-3 p-4 bg-black/80 rounded-xl border border-white/20 w-fit min-w-[120px] z-20">
           {EMOTES.map(e => (
             <button key={e} onClick={() => { onEmote(e); setOpen(false); }}
-              className="text-2xl p-3 hover:scale-125 transition-transform">
+              className="text-3xl p-2 hover:scale-125 transition-transform leading-none flex items-center justify-center w-12 h-12">
               {e}
             </button>
           ))}

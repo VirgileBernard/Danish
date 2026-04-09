@@ -6,7 +6,7 @@ import { EmoteWheel } from './EmoteWheel';
 import type { Card, Player } from '@/features/game/utils/types';
 
 export function GameBoard() {
-  const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn, takePile, undoLastMove, stateHistory, sendEmote } =
+  const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn, takePile, undoLastMove, stateHistory, sendEmote, resetGame } =
     useGameStore();
   const [pendingAce, setPendingAce] = useState<Card | null>(null);
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
@@ -41,7 +41,7 @@ export function GameBoard() {
     return <div className="flex items-center justify-center h-screen bg-green-900 text-white"><p>No game in progress.</p></div>;
   }
 
-  const { players, pile, deck, currentPlayerIndex, validMoves, bestMove, phase } = gameState;
+  const { players, pile, deck, currentPlayerIndex, validMoves, bestMove, phase, finishOrder } = gameState;
   const [human, bot1, bot2, bot3] = players;
   const isPreparing = phase === 'PREPARATION';
   const cannotPlay = gameStarted && isPlayerTurn && !isPreparing && !pendingAce && validMoves.length === 0;
@@ -49,8 +49,8 @@ export function GameBoard() {
 
   function handleCardClick(card: Card) {
     if (isPreparing || !isPlayerTurn || pendingAce) return;
-    const isHiddenPlay = human.hand.length === 0 && human.visibleCards.length === 0;
-    if (card.rank === 'A' && !isHiddenPlay) { setPendingAce(card); return; }
+    // Ace is selected like any other card; attack mode is entered at pile click,
+    // allowing the player to first select a second Ace for a double play.
     setSelectedCards(prev => {
       if (prev.some(c => c.id === card.id)) return prev.filter(c => c.id !== card.id);
       if (prev.length > 0 && prev[0].rank !== card.rank) return [card];
@@ -59,10 +59,17 @@ export function GameBoard() {
   }
 
   function handlePileClick() {
-    if (selectedCards.length > 0 && !pendingAce) {
-      playCards(selectedCards);
-      setSelectedCards([]);
+    if (selectedCards.length === 0 || pendingAce) return;
+    const hasAce = selectedCards.some(c => c.rank === 'A');
+    const mustPlayDouble = gameState?.turnContext.mustPlayDouble ?? false;
+    if (hasAce && !mustPlayDouble) {
+      // Enter attack mode — player must designate a target by clicking a bot zone.
+      // Under mustPlayDouble, double Ace plays as a normal double (no target needed).
+      setPendingAce(selectedCards.find(c => c.rank === 'A')!);
+      return;
     }
+    playCards(selectedCards);
+    setSelectedCards([]);
   }
 
   function BotZone({ player, idx }: { player: Player; idx: number }) {
@@ -76,7 +83,7 @@ export function GameBoard() {
         <PlayerZone player={player} isCurrentPlayer={currentPlayerIndex === idx} isHuman={false}
           isPreparing={false} cannotPlay={false} validMoves={[]} bestMove={null} selectedCardIds={[]} onCardClick={() => {}} onSwap={() => {}} />
         {pendingAce && (
-          <button onClick={() => { playCards([pendingAce!], player.id); setPendingAce(null); }}
+          <button onClick={() => { playCards(selectedCards, player.id); setPendingAce(null); setSelectedCards([]); }}
             className="absolute inset-0 flex items-center justify-center bg-red-500/40 hover:bg-red-500/60 rounded-lg border-2 border-red-400 transition-colors">
             <span className="text-white font-bold text-sm drop-shadow">⚔ Attaquer</span>
           </button>
@@ -89,6 +96,21 @@ export function GameBoard() {
 
   return (
     <div className="relative min-h-screen bg-green-900 flex items-center justify-center p-4">
+      {phase === 'FINISHED' && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 text-center min-w-[240px]">
+            <h2 className="text-2xl font-bold mb-4">Partie terminée !</h2>
+            {finishOrder.map((playerId, i) => (
+              <p key={playerId} className="text-gray-700 py-0.5">
+                {i + 1}. {players.find(p => p.id === playerId)?.name}
+              </p>
+            ))}
+            <button onClick={resetGame} className="mt-6 px-6 py-2 bg-green-700 text-white rounded-lg hover:bg-green-600">
+              Rejouer
+            </button>
+          </div>
+        </div>
+      )}
       {stateHistory.length > 0 && phase === 'PLAYING' && (
         <button onClick={undoLastMove} className="absolute top-2 right-2 px-3 py-1 bg-black/40 hover:bg-black/60 text-white/70 text-xs rounded border border-white/20">↩ Retour</button>
       )}

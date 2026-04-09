@@ -605,6 +605,84 @@ describe('applyPlay — card 6', () => {
   });
 });
 
+// ── Card 3 — effect propagation ────────────────────────────────────────────
+
+describe('applyPlay — card 3 mirrors full effect of previous card', () => {
+  // Case A: 3 after 8 → skips next player (skippedPlayers: 1 + advancement)
+  it('Case A — 3 after 8 sets skippedPlayers: 1 and skips the next player', () => {
+    const eight = c('8', 'hearts');
+    const three = c('3', 'hearts');
+    const p0 = makePlayer('p0', [eight, c('5', 'hearts'), c('6', 'hearts')]);
+    const p1 = makePlayer('p1', [three, c('5', 'spades'), c('6', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    const p3 = makePlayer('p3', [c('Q', 'diamonds'), c('K', 'diamonds'), c('A', 'diamonds')]);
+    // p1 plays 3 after the 8 that p0 played
+    const state = makeApplyState([p0, p1, p2, p3], 1, {
+      pile: [eight],
+      context: { lastEffectiveCard: eight },
+    });
+    const next = applyPlay([three], null, state);
+    expect(next.turnContext.skippedPlayers).toBe(1);
+    // p2 (index 2) is skipped; turn goes to p3 (index 3)
+    expect(next.currentPlayerIndex).toBe(3);
+  });
+
+  // Case B: 3 after J → mustPlayDouble propagated to next player
+  it('Case B — 3 after J propagates mustPlayDouble to next player', () => {
+    const jack = c('J', 'hearts');
+    const three = c('3', 'hearts');
+    const p0 = makePlayer('p0', [jack, c('5', 'hearts'), c('6', 'hearts')]);
+    const p1 = makePlayer('p1', [three, c('5', 'spades'), c('6', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    // p1 plays single 3 under Jack rule (3 is a Jack exception — valid as single)
+    const state = makeApplyState([p0, p1, p2], 1, {
+      pile: [jack],
+      context: { mustPlayDouble: true, lastEffectiveCard: jack },
+    });
+    const next = applyPlay([three], null, state);
+    expect(next.turnContext.mustPlayDouble).toBe(true);
+    expect(next.currentPlayerIndex).toBe(2);
+  });
+
+  // Case C: 3 after 6 → mustFollowSuit and mustFollowAboveValue propagated
+  it('Case C — 3 after 6 propagates suit constraint', () => {
+    const sixH = c('6', 'hearts');
+    const threeH = c('3', 'hearts');
+    const p0 = makePlayer('p0', [sixH, c('7', 'hearts'), c('8', 'hearts')]);
+    const p1 = makePlayer('p1', [threeH, c('5', 'spades'), c('6', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    const state = makeApplyState([p0, p1, p2], 1, {
+      pile: [sixH],
+      context: {
+        mustFollowSuit: 'hearts',
+        mustFollowAboveValue: sixH.value,
+        lastEffectiveCard: sixH,
+      },
+    });
+    const next = applyPlay([threeH], null, state);
+    expect(next.turnContext.mustFollowSuit).toBe('hearts');
+    expect(next.turnContext.mustFollowAboveValue).toBe(sixH.value);
+    expect(next.currentPlayerIndex).toBe(2);
+  });
+
+  // 2x3 under Jack: satisfies mustPlayDouble AND propagates it to next player
+  it('2x3 under Jack — satisfies double obligation and propagates mustPlayDouble', () => {
+    const jack = c('J', 'hearts');
+    const three1 = c('3', 'hearts');
+    const three2 = c('3', 'spades');
+    const p0 = makePlayer('p0', [jack, c('5', 'hearts'), c('6', 'hearts')]);
+    const p1 = makePlayer('p1', [three1, three2, c('5', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    const state = makeApplyState([p0, p1, p2], 1, {
+      pile: [jack],
+      context: { mustPlayDouble: true, lastEffectiveCard: jack },
+    });
+    const next = applyPlay([three1, three2], null, state);
+    expect(next.turnContext.mustPlayDouble).toBe(true);
+    expect(next.currentPlayerIndex).toBe(2);
+  });
+});
+
 // ── Card 8 ─────────────────────────────────────────────────────────────────
 
 describe('applyPlay — card 8', () => {

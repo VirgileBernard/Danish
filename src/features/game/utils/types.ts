@@ -16,6 +16,7 @@ export interface Player {
   title: string;
   isBot: boolean;
   isReady: boolean;
+  isFinished: boolean;
   hand: Card[];
   visibleCards: Card[];
   hiddenCards: Card[];

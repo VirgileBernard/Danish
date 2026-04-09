@@ -10,8 +10,6 @@ function cardState(card: Card, validMoves: Card[], bestMove: Card | null, select
   return 'normal';
 }
 
-const FAN_ANGLES = [-6, -2, 2, 6];
-
 interface PlayerZoneProps {
   player: Player;
   isCurrentPlayer: boolean;
@@ -29,17 +27,25 @@ function FanRow({ cards, isHidden, validMoves, bestMove, selectedIds, onCardClic
   cards: Card[]; isHidden: boolean; validMoves: Card[]; bestMove: Card | null;
   selectedIds: string[]; onCardClick: (c: Card) => void;
 }) {
-  const overlap = 22;
-  const width = cards.length <= 1 ? 64 : (cards.length - 1) * overlap + 64;
+  const n = cards.length;
+  const spread = n <= 1 ? 0 : Math.min(n * 6, 24);
+  const angles = cards.map((_, i) => n <= 1 ? 0 : -spread / 2 + (spread / (n - 1)) * i);
+  const overlap = 28;
+  const width = n <= 1 ? 64 : (n - 1) * overlap + 64;
   return (
-    <div className="relative" style={{ width, height: 105 }}>
-      {cards.map((card, i) => (
-        <div key={card.id} className="absolute" style={{ left: i * overlap, transform: `rotate(${FAN_ANGLES[i] ?? 6}deg)`, transformOrigin: 'bottom center' }}>
-          <GameCard card={isHidden ? null : card}
-            state={isHidden ? 'hidden' : cardState(card, validMoves, bestMove, selectedIds)}
-            onClick={isHidden ? undefined : () => onCardClick(card)} />
-        </div>
-      ))}
+    <div className="relative" style={{ width, height: 110 }}>
+      {cards.map((card, i) => {
+        const rot = angles[i] ?? 0;
+        const ty = Math.abs(rot) * 0.5;
+        return (
+          <div key={card.id} className="absolute"
+            style={{ left: i * overlap, transform: `rotate(${rot}deg) translateY(${ty}px)`, transformOrigin: 'bottom center' }}>
+            <GameCard card={isHidden ? null : card}
+              state={isHidden ? 'hidden' : cardState(card, validMoves, bestMove, selectedIds)}
+              onClick={isHidden ? undefined : () => onCardClick(card)} />
+          </div>
+        );
+      })}
     </div>
   );
 }

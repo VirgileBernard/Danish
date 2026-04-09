@@ -23,7 +23,7 @@ export function MemberCard() {
             ))}
           </div>
         </div>
-        <img src="/logoBC-tsansTexte.png" className="w-12 h-12 object-contain opacity-80" alt="logo" />
+        <img src="/logoBC-sansTexte.png" className="w-12 h-12 object-contain opacity-80" alt="logo" />
       </div>
     </div>
   );

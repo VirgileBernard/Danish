@@ -67,8 +67,12 @@ export function isValidPlay(cards: Card[], state: GameState): boolean {
 
   // ── 3. Seven rule — must play ≤ 7 ────────────────────────────────────────
   // Only face-value ≤ 7 ranks are legal. Ace is explicitly forbidden by the rules.
+  // return true immediately once the rank check passes — value comparison is
+  // bypassed, otherwise 4/5/6 (values 1–3) would fail the ≥ pile-top check
+  // since lastEffectiveCard is still the 7 (value 4).
   if (turnContext.mustPlayBelow7) {
     if (!BELOW_7_RANKS.has(rank)) return false;
+    return true;
   }
 
   // ── 4. Six rule — must follow suit and play higher ────────────────────────
@@ -194,15 +198,19 @@ export function applyPlay(
         break;
 
       case '3': {
-        // Mirror grandparent card's effect forward
+        // Mirror the grandparent card's FULL effect forward (value + all context flags)
         const mirrored = turnContext.lastEffectiveCard;
         newContext = {
           ...base,
           lastEffectiveCard: mirrored,
-          // If mirroring a 6, carry the suit constraint forward
+          // 6 → carry suit constraint
           mustFollowSuit: mirrored?.rank === '6' ? mirrored.suit : null,
           mustFollowAboveValue:
             mirrored?.rank === '6' ? getEffectiveValue(mirrored, config) : null,
+          // J → next player must still play a double
+          mustPlayDouble: mirrored?.rank === 'J',
+          // 8 → next player is skipped (advancement handled below)
+          skippedPlayers: mirrored?.rank === '8' ? 1 : 0,
         };
         break;
       }
@@ -259,37 +267,57 @@ export function applyPlay(
     hand: repHand,
     visibleCards: newVisible,
     hiddenCards: newHidden,
+    isFinished: currentPlayer.isFinished || playerDone,
   };
   const newPlayers = state.players.map((p, i) =>
     i === state.currentPlayerIndex ? updatedPlayer : p,
   );
 
-  // ── 8. Advance to next player ─────────────────────────────────────────────
+  // ── 8. Advance to next player (skip finished players) ────────────────────
   const n = state.players.length;
-  let nextIndex: number;
+  let rawNext: number;
 
   if (isCut) {
-    // 10 or 4-of-a-kind: same player plays again on empty pile
-    nextIndex = state.currentPlayerIndex;
+    rawNext = state.currentPlayerIndex;
   } else if (rank === 'A' && targetId !== null) {
-    // Ace: jump to the attacked player
     const found = state.players.findIndex(p => p.id === targetId);
-    nextIndex = found !== -1 ? found : (state.currentPlayerIndex + 1) % n;
+    rawNext = found !== -1 ? found : (state.currentPlayerIndex + 1) % n;
   } else {
-    // 8: skip N players; all others: advance by 1
-    const skip = rank === '8' ? cards.length : 0;
-    nextIndex = (state.currentPlayerIndex + 1 + skip) % n;
+    // 3 mirroring an 8 propagates the skip (turnContext still holds the pre-play state)
+    const mirroredEight = rank === '3' && turnContext.lastEffectiveCard?.rank === '8';
+    const skip = rank === '8' ? cards.length : mirroredEight ? 1 : 0;
+    rawNext = (state.currentPlayerIndex + 1 + skip) % n;
+  }
+
+  let nextIndex = rawNext;
+  for (let i = 0; i < n; i++) {
+    if (!newPlayers[nextIndex]!.isFinished) break;
+    nextIndex = (nextIndex + 1) % n;
+  }
+
+  // ── 9. Check for game end ─────────────────────────────────────────────────
+  const activePlayers = newPlayers.filter(p => !p.isFinished);
+  let finalPhase: GameState['phase'] = state.phase;
+  let finalFinishOrder = newFinishOrder;
+
+  if (state.phase === 'PLAYING' && activePlayers.length === 1) {
+    finalPhase = 'FINISHED';
+    const loser = activePlayers[0]!;
+    if (!finalFinishOrder.includes(loser.id)) {
+      finalFinishOrder = [...finalFinishOrder, loser.id];
+    }
   }
 
   return {
     ...state,
+    phase: finalPhase,
     players: newPlayers,
     deck: repDeck,
     pile: finalPile,
     discard: finalDiscard,
     turnContext: newContext,
     currentPlayerIndex: nextIndex,
-    finishOrder: newFinishOrder,
+    finishOrder: finalFinishOrder,
     validMoves: [],
     bestMove: null,
   };

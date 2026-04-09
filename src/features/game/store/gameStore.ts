@@ -12,6 +12,17 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Returns the index of the next non-finished player after `from`. */
+function nextNonFinished(players: Player[], from: number): number {
+  const n = players.length;
+  let idx = (from + 1) % n;
+  for (let i = 0; i < n - 1; i++) {
+    if (!players[idx]!.isFinished) return idx;
+    idx = (idx + 1) % n;
+  }
+  return idx;
+}
+
 /** True when the player at currentPlayerIndex is human (not a bot). */
 function deriveIsPlayerTurn(gs: GameState | null): boolean {
   if (!gs) return false;
@@ -26,6 +37,7 @@ function makeHumanPlayer(name: string): Player {
     title: 'Novice',
     isBot: false,
     isReady: false,
+    isFinished: false,
     hand: [],
     visibleCards: [],
     hiddenCards: [],
@@ -41,6 +53,7 @@ function makeBotPlayer(index: number): Player {
     title: profile?.title ?? 'Joueur',
     isBot: true,
     isReady: true,
+    isFinished: false,
     hand: [],
     visibleCards: [],
     hiddenCards: [],
@@ -151,8 +164,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       cards.every(c => currentPlayer.hiddenCards.some(h => h.id === c.id));
 
     if (!isValidPlay(cards, gs)) {
-      // Invalid hidden card → auto-take pile (rule: player keeps hidden card + takes pile)
-      if (isHiddenPlay) get().takePile();
+      if (isHiddenPlay && currentPlayer) {
+        // Revealed hidden card is invalid — move it from hiddenCards to hand first,
+        // then take the pile (rule: player receives the card + the whole pile).
+        // BUG 4: mustPlayDouble + hidden non-Jack also reaches this branch because
+        // isValidPlay returns false for any non-J single under mustPlayDouble. ✓
+        const updatedPlayer = {
+          ...currentPlayer,
+          hiddenCards: currentPlayer.hiddenCards.filter(
+            c => !cards.some(played => played.id === c.id),
+          ),
+          hand: [...currentPlayer.hand, ...cards],
+        };
+        const newPlayers = gs.players.map((p, i) =>
+          i === gs.currentPlayerIndex ? updatedPlayer : p,
+        );
+        set({ gameState: { ...gs, players: newPlayers } });
+        get().takePile();
+      }
       return;
     }
     const next = withDerivedFields(applyPlay(cards, targetId ?? null, gs));
@@ -228,7 +257,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newPlayers = gs.players.map((p, i) =>
       i === gs.currentPlayerIndex ? newHuman : p,
     );
-    const nextIndex = (gs.currentPlayerIndex + 1) % gs.players.length;
+    const nextIndex = nextNonFinished(newPlayers, gs.currentPlayerIndex);
     console.log(`[${human.name}] cannot play — takes the pile (${gs.pile.length} cards)`);
     const next = withDerivedFields({
       ...gs,
@@ -256,30 +285,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gs) return;
 
     const bot = gs.players[gs.currentPlayerIndex];
-    if (!bot || !bot.isBot) return;
+    if (!bot || !bot.isBot || bot.isFinished) return;
+
+    const botTakePile = (reason: string) => {
+      const newBot: Player = { ...bot, hand: [...bot.hand, ...gs.pile] };
+      const newPlayers = gs.players.map((p, i) => i === gs.currentPlayerIndex ? newBot : p);
+      const nextIndex = nextNonFinished(newPlayers, gs.currentPlayerIndex);
+      console.log(`[${bot.name}] ${reason} — takes the pile (${gs.pile.length} cards)`);
+      const next = withDerivedFields({ ...gs, players: newPlayers, pile: [], turnContext: CLEARED_CONTEXT, currentPlayerIndex: nextIndex });
+      set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
+    };
 
     const botCards = getBotMove(bot, gs, difficulty);
-    if (botCards.length === 0) {
-      // Bot cannot play — takes the pile
-      const newBot: Player = { ...bot, hand: [...bot.hand, ...gs.pile] };
-      const newPlayers = gs.players.map((p, i) =>
-        i === gs.currentPlayerIndex ? newBot : p,
-      );
-      const nextIndex = (gs.currentPlayerIndex + 1) % gs.players.length;
-      console.log(`[${bot.name}] cannot play — takes the pile (${gs.pile.length} cards)`);
-      const next = withDerivedFields({
-        ...gs,
-        players: newPlayers,
-        pile: [],
-        turnContext: CLEARED_CONTEXT,
-        currentPlayerIndex: nextIndex,
-      });
-      set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
-      return;
-    }
+    if (botCards.length === 0) { botTakePile('cannot play'); return; }
 
     // Safety: confirm the chosen play is still valid (guards async race conditions)
-    if (!isValidPlay(botCards, gs)) return;
+    if (!isValidPlay(botCards, gs)) { botTakePile('invalid move from getBotMove'); return; }
 
     // For Ace: target the opponent with the fewest remaining cards
     let targetId: string | null = null;
