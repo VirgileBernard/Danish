@@ -13,6 +13,7 @@ export interface Card {
 export interface Player {
   id: string;
   name: string;
+  title: string;
   isBot: boolean;
   isReady: boolean;
   hand: Card[];

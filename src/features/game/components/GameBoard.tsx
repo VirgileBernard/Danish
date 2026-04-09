@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { useGameStore } from '@/features/game/store/gameStore';
 import { PlayerZone } from './PlayerZone';
 import { GameCard } from './GameCard';
+import { EmoteWheel } from './EmoteWheel';
 import type { Card, Player } from '@/features/game/utils/types';
 
 export function GameBoard() {
-  const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn, takePile, undoLastMove, stateHistory } =
+  const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn, takePile, undoLastMove, stateHistory, sendEmote } =
     useGameStore();
   const [pendingAce, setPendingAce] = useState<Card | null>(null);
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
   const [gameStarted, setGameStarted] = useState(false);
+  const [activeBubbles, setActiveBubbles] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!gameState || gameState.phase !== 'PLAYING' || isPlayerTurn) return;
@@ -26,6 +28,14 @@ export function GameBoard() {
     const t = setTimeout(() => setGameStarted(true), 500);
     return () => clearTimeout(t);
   }, [gameState?.phase]);
+
+  const lastEmote = gameState?.emotes[gameState.emotes.length - 1];
+  useEffect(() => {
+    if (!lastEmote) return;
+    setActiveBubbles(p => ({ ...p, [lastEmote.playerId]: lastEmote.emote }));
+    const t = setTimeout(() => setActiveBubbles(p => { const n = { ...p }; delete n[lastEmote.playerId]; return n; }), 3000);
+    return () => clearTimeout(t);
+  }, [lastEmote?.timestamp]);
 
   if (!gameState) {
     return <div className="flex items-center justify-center h-screen bg-green-900 text-white"><p>No game in progress.</p></div>;
@@ -58,6 +68,11 @@ export function GameBoard() {
   function BotZone({ player, idx }: { player: Player; idx: number }) {
     return (
       <div className="relative flex justify-center">
+        {activeBubbles[player.id] && (
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/70 rounded-full px-3 py-1 text-xl animate-bounce z-10">
+            {activeBubbles[player.id]}
+          </div>
+        )}
         <PlayerZone player={player} isCurrentPlayer={currentPlayerIndex === idx} isHuman={false}
           isPreparing={false} cannotPlay={false} validMoves={[]} bestMove={null} selectedCardIds={[]} onCardClick={() => {}} onSwap={() => {}} />
         {pendingAce && (
@@ -102,7 +117,12 @@ export function GameBoard() {
         <div><BotZone player={bot3} idx={3} /></div>
         <div />
 
-        <div className="flex flex-col items-center gap-2">
+        <div className="relative flex flex-col items-center gap-2">
+          {activeBubbles['human'] && (
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/70 rounded-full px-3 py-1 text-xl animate-bounce z-10">
+              {activeBubbles['human']}
+            </div>
+          )}
           <PlayerZone player={human} isCurrentPlayer={currentPlayerIndex === 0} isHuman={true}
             isPreparing={isPreparing} cannotPlay={cannotPlay} validMoves={pendingAce ? [] : validMoves}
             bestMove={pendingAce ? null : bestMove} selectedCardIds={selectedCards.map(c => c.id)}
@@ -122,6 +142,7 @@ export function GameBoard() {
           {cannotPlay && pile.length > 0 && (
             <button className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded text-sm ring-2 ring-red-400 animate-pulse" onClick={takePile}>Ramasser la pile 📥</button>
           )}
+          <EmoteWheel onEmote={emote => sendEmote('human', emote)} />
         </div>
         <div />
       </div>

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { BotDifficulty, Card, GameState, Player, TurnContext } from '@/features/game/utils/types';
+import { BOT_PROFILES } from '@/features/game/data/botProfiles';
 import {
   initGame,
   isValidPlay,
@@ -22,6 +23,7 @@ function makeHumanPlayer(name: string): Player {
   return {
     id: 'human',
     name,
+    title: 'Novice',
     isBot: false,
     isReady: false,
     hand: [],
@@ -32,11 +34,13 @@ function makeHumanPlayer(name: string): Player {
 }
 
 function makeBotPlayer(index: number): Player {
+  const profile = BOT_PROFILES[index - 1];
   return {
     id: `bot-${index}`,
-    name: `Bot ${index}`,
+    name: profile?.name ?? `Bot ${index}`,
+    title: profile?.title ?? 'Joueur',
     isBot: true,
-    isReady: true, // bots are always ready during PREPARATION
+    isReady: true,
     hand: [],
     visibleCards: [],
     hiddenCards: [],
@@ -94,6 +98,7 @@ interface GameStore {
   takePile: () => void;
   undoLastMove: () => void;
   resetGame: () => void;
+  sendEmote: (playerId: string, emote: string) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -289,6 +294,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const next = withDerivedFields(applyPlay(botCards, targetId, gs));
     set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
+    const BOT_EMOTES = ['😊', '😐', '😍', '😵'];
+    if (Math.random() < 0.2) get().sendEmote(bot.id, BOT_EMOTES[Math.floor(Math.random() * BOT_EMOTES.length)]);
   },
 
   /**
@@ -306,5 +313,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetGame: () => {
     set({ gameState: null, stateHistory: [], isPlayerTurn: false });
+  },
+
+  sendEmote: (playerId, emote) => {
+    const gs = get().gameState;
+    if (!gs) return;
+    const newEmotes = [...gs.emotes, { playerId, emote, timestamp: Date.now() }].slice(-10);
+    set({ gameState: { ...gs, emotes: newEmotes } });
   },
 }));

@@ -2,6 +2,7 @@
 // Phase 1: game vs bots only. Phase 2 will add tournament + feed routes.
 import { useEffect } from 'react';
 import { GameBoard } from '@/features/game/components/GameBoard';
+import { MemberCard } from '@/features/game/components/MemberCard';
 import { useGameStore } from '@/features/game/store/gameStore';
 
 function GameRoute() {
@@ -17,6 +18,7 @@ function GameRoute() {
 function App() {
   const path = window.location.pathname;
   if (path === '/game') return <GameRoute />;
+  if (path === '/profile') return <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4"><MemberCard /></div>;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
