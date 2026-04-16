@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BotDifficulty, Card, GameState, Player, TurnContext } from '@/features/game/utils/types';
+import type { BotDifficulty, Card, GameState, Player, RulesConfig, TurnContext } from '@/features/game/utils/types';
 import { BOT_PROFILES } from '@/features/game/data/botProfiles';
 import {
   initGame,
@@ -8,6 +8,7 @@ import {
   getBotMove,
   getValidMoves,
   getBestMove,
+  appendLogAction,
 } from '@/features/game/utils/cardRules';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,12 +46,13 @@ function makeHumanPlayer(name: string): Player {
   };
 }
 
-function makeBotPlayer(index: number): Player {
-  const profile = BOT_PROFILES[index - 1];
+type BotProfile = typeof BOT_PROFILES[number];
+
+function makeBotPlayer(index: number, profile: BotProfile): Player {
   return {
     id: `bot-${index}`,
-    name: profile?.name ?? `Bot ${index}`,
-    title: profile?.title ?? 'Joueur',
+    name: profile.name,
+    title: profile.title,
     isBot: true,
     isReady: true,
     isFinished: false,
@@ -61,10 +63,47 @@ function makeBotPlayer(index: number): Player {
   };
 }
 
+/** Returns `count` distinct bot profiles picked at random from BOT_PROFILES. */
+function pickRandomBotProfiles(count: number): BotProfile[] {
+  return [...BOT_PROFILES]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, count);
+}
+
 /** Total cards remaining for a player across all zones. */
 function totalCards(p: Player): number {
   return p.hand.length + p.visibleCards.length + p.hiddenCards.length;
 }
+
+const SUIT_GLYPH: Record<Card['suit'], string> = {
+  hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠',
+};
+
+function formatCardsForLog(cards: Card[]): string {
+  return cards.map(c => `${c.rank}${SUIT_GLYPH[c.suit]}`).join(' ');
+}
+
+/**
+ * Sweep the current pile into `playerIdx`'s hand. Clears pile, resets the
+ * turn context, and advances to the next non-finished player. Used by both
+ * the human- and bot- invalid-hidden branches once the revealed card has
+ * already been appended to state.pile.
+ */
+function sweepPileIntoHand(gs: GameState, playerIdx: number): GameState {
+  const player = gs.players[playerIdx];
+  if (!player) return gs;
+  const sweptPlayer: Player = { ...player, hand: [...player.hand, ...gs.pile] };
+  const newPlayers = gs.players.map((p, i) => (i === playerIdx ? sweptPlayer : p));
+  const nextIndex = nextNonFinished(newPlayers, playerIdx);
+  return withDerivedFields({
+    ...gs,
+    players: newPlayers,
+    pile: [],
+    turnContext: CLEARED_CONTEXT,
+    currentPlayerIndex: nextIndex,
+  });
+}
+
 
 /** Push gs onto history (max 10) when in PLAYING phase. */
 function pushHistory(history: GameState[], gs: GameState): GameState[] {
@@ -102,6 +141,7 @@ interface GameStore {
   stateHistory: GameState[];
   difficulty: BotDifficulty;
   isPlayerTurn: boolean;
+  isDebugMode: boolean;
 
   startGame: (playerName: string, difficulty: BotDifficulty) => void;
   playCards: (cards: Card[], targetId?: string | null) => boolean;
@@ -113,6 +153,8 @@ interface GameStore {
   resetGame: () => void;
   passTurn: () => void;
   sendEmote: (playerId: string, emote: string) => void;
+  setDebugMode: (v: boolean) => void;
+  setRulesMode: (mode: RulesConfig['mode']) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -121,6 +163,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   stateHistory: [],
   difficulty: 'medium',
   isPlayerTurn: false,
+  isDebugMode: false,
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -132,11 +175,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * The game starts in PREPARATION phase so the human can swap cards.
    */
   startGame: (playerName, difficulty) => {
+    const botProfiles = pickRandomBotProfiles(3);
     const players: Player[] = [
       makeHumanPlayer(playerName),
-      makeBotPlayer(1),
-      makeBotPlayer(2),
-      makeBotPlayer(3),
+      ...botProfiles.map((profile, i) => makeBotPlayer(i + 1, profile)),
     ];
     const gs = initGame(players, { mode: 'patriarchal' });
     set({ gameState: gs, difficulty, isPlayerTurn: deriveIsPlayerTurn(gs) });
@@ -166,22 +208,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (!isValidPlay(cards, gs)) {
       if (isHiddenPlay && currentPlayer) {
-        // Revealed hidden card is invalid — move it from hiddenCards to hand first,
-        // then take the pile (rule: player receives the card + the whole pile).
-        // BUG 4: mustPlayDouble + hidden non-Jack also reaches this branch because
-        // isValidPlay returns false for any non-J single under mustPlayDouble. ✓
-        const updatedPlayer = {
+        // Revealed hidden card is invalid — reveal it face-up on the pile,
+        // then sweep the whole pile (including the just-revealed card) into
+        // the player's hand. The card must not vanish.
+        const revealedPlayer: Player = {
           ...currentPlayer,
           hiddenCards: currentPlayer.hiddenCards.filter(
             c => !cards.some(played => played.id === c.id),
           ),
-          hand: [...currentPlayer.hand, ...cards],
         };
-        const newPlayers = gs.players.map((p, i) =>
-          i === gs.currentPlayerIndex ? updatedPlayer : p,
+        const playersAfterReveal = gs.players.map((p, i) =>
+          i === gs.currentPlayerIndex ? revealedPlayer : p,
         );
-        set({ gameState: { ...gs, players: newPlayers } });
-        get().takePile();
+        const action = `${currentPlayer.name} joue ${formatCardsForLog(cards)} — Oups ! prend la pile`;
+        const reveal: GameState = {
+          ...gs,
+          players: playersAfterReveal,
+          pile: [...gs.pile, ...cards],
+          log: appendLogAction(gs.log, action, gs.currentPlayerIndex),
+        };
+        set({ gameState: reveal, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(reveal) });
+        const swept = sweepPileIntoHand(reveal, reveal.currentPlayerIndex);
+        set({ gameState: swept, isPlayerTurn: deriveIsPlayerTurn(swept) });
       }
       return false;
     }
@@ -267,6 +315,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       pile: [],
       turnContext: CLEARED_CONTEXT,
       currentPlayerIndex: nextIndex,
+      log: appendLogAction(gs.log, `${human.name} prend la pile`, gs.currentPlayerIndex),
     });
     set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
   },
@@ -274,8 +323,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   /**
    * Executes one bot turn for the currently active bot player.
    *
-   * Should be invoked by the UI after a short delay (600 ms for easy,
-   * 1000 ms for medium, 1500 ms for hard) when `isPlayerTurn` is false.
+   * Should be invoked by the UI after a short delay (1200 ms for easy,
+   * 2000 ms for medium, 2500 ms for hard) when `isPlayerTurn` is false.
    *
    * Calls `getBotMove` to choose which cards to play, then validates the
    * play with `isValidPlay` as a safety guard before calling `applyPlay`.
@@ -294,31 +343,56 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const newPlayers = gs.players.map((p, i) => i === gs.currentPlayerIndex ? newBot : p);
       const nextIndex = nextNonFinished(newPlayers, gs.currentPlayerIndex);
       console.log(`[${bot.name}] ${reason} — takes the pile (${gs.pile.length} cards)`);
-      const next = withDerivedFields({ ...gs, players: newPlayers, pile: [], turnContext: CLEARED_CONTEXT, currentPlayerIndex: nextIndex });
+      const next = withDerivedFields({ ...gs, players: newPlayers, pile: [], turnContext: CLEARED_CONTEXT, currentPlayerIndex: nextIndex, log: appendLogAction(gs.log, `${bot.name} prend la pile`, gs.currentPlayerIndex) });
       set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
     };
 
+    // Reveal the given hidden cards face-up on the pile, pause 700ms so the
+    // user sees them, then sweep the whole pile (including the revealed card)
+    // into the bot's hand. Mirrors the human invalid-hidden path in playCards.
+    const botRevealHiddenAndSweep = (cardsToReveal: Card[]) => {
+      const revealedBot: Player = {
+        ...bot,
+        hiddenCards: bot.hiddenCards.filter(c => !cardsToReveal.some(r => r.id === c.id)),
+      };
+      const playersAfterReveal = gs.players.map((p, i) => i === gs.currentPlayerIndex ? revealedBot : p);
+      const action = `${bot.name} joue ${formatCardsForLog(cardsToReveal)} — Oups ! prend la pile`;
+      console.log(`[${bot.name}] invalid hidden card — reveals on pile then takes (${gs.pile.length + cardsToReveal.length} cards)`);
+      const reveal: GameState = {
+        ...gs,
+        players: playersAfterReveal,
+        pile: [...gs.pile, ...cardsToReveal],
+        log: appendLogAction(gs.log, action, gs.currentPlayerIndex),
+      };
+      set({ gameState: reveal, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(reveal) });
+      const botIdx = gs.currentPlayerIndex;
+      window.setTimeout(() => {
+        const cur = get().gameState;
+        if (!cur) return;
+        const swept = sweepPileIntoHand(cur, botIdx);
+        set({ gameState: swept, isPlayerTurn: deriveIsPlayerTurn(swept) });
+      }, 700);
+    };
+
+    const isBotHiddenMode =
+      bot.hand.length === 0 && bot.visibleCards.length === 0 && bot.hiddenCards.length > 0;
+
     const botCards = getBotMove(bot, gs, difficulty);
-    if (botCards.length === 0) { botTakePile('cannot play'); return; }
+
+    // getBotMove returns [] when no valid play exists. In hidden mode this
+    // means every hidden card would fail isValidPlay — but Danish rules still
+    // require a blind reveal, so pick one hidden card and run it through the
+    // same reveal+sweep as an explicitly invalid play.
+    if (botCards.length === 0) {
+      if (isBotHiddenMode) botRevealHiddenAndSweep([bot.hiddenCards[0]]);
+      else botTakePile('cannot play');
+      return;
+    }
 
     // Safety: confirm the chosen play is still valid (guards async race conditions)
     if (!isValidPlay(botCards, gs)) {
-      const isBotHiddenPlay = bot.hand.length === 0 && bot.visibleCards.length === 0;
-      if (isBotHiddenPlay) {
-        // Invalid hidden card: move it to hand, then take the pile
-        const updatedBot: Player = {
-          ...bot,
-          hiddenCards: bot.hiddenCards.filter(c => !botCards.some(b => b.id === c.id)),
-          hand: [...botCards, ...gs.pile],
-        };
-        const newPlayers = gs.players.map((p, i) => i === gs.currentPlayerIndex ? updatedBot : p);
-        const nextIndex = nextNonFinished(newPlayers, gs.currentPlayerIndex);
-        console.log(`[${bot.name}] invalid hidden card — takes the pile (${gs.pile.length} cards)`);
-        const next = withDerivedFields({ ...gs, players: newPlayers, pile: [], turnContext: CLEARED_CONTEXT, currentPlayerIndex: nextIndex });
-        set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
-      } else {
-        botTakePile('invalid move from getBotMove');
-      }
+      if (isBotHiddenMode) botRevealHiddenAndSweep(botCards);
+      else botTakePile('invalid move from getBotMove');
       return;
     }
 
@@ -353,7 +427,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetGame: () => {
-    set({ gameState: null, stateHistory: [], isPlayerTurn: false });
+    set({ gameState: null, stateHistory: [], isPlayerTurn: false, isDebugMode: false });
+  },
+
+  setDebugMode: (v) => set({ isDebugMode: v }),
+
+  /**
+   * Updates the rules mode (patriarchal ↔ matriarchal) during PREPARATION.
+   * Only allowed before PLAYING starts — mode is locked once cards are in play.
+   */
+  setRulesMode: (mode) => {
+    const gs = get().gameState;
+    if (!gs || gs.phase !== 'PREPARATION') return;
+    set({ gameState: { ...gs, config: { ...gs.config, mode } } });
   },
 
   passTurn: () => {

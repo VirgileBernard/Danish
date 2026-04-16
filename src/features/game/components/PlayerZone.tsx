@@ -21,6 +21,7 @@ interface PlayerZoneProps {
   selectedCardIds: string[];
   onCardClick: (card: Card) => void;
   onSwap: (handCard: Card, visibleCard: Card) => void;
+  isDebugMode?: boolean;
 }
 
 function FanRow({ cards, isHidden, validMoves, bestMove, selectedIds, onCardClick }: {
@@ -50,7 +51,7 @@ function FanRow({ cards, isHidden, validMoves, bestMove, selectedIds, onCardClic
   );
 }
 
-export function PlayerZone({ player, isCurrentPlayer, isHuman, isPreparing, cannotPlay, validMoves, bestMove, selectedCardIds, onCardClick, onSwap }: PlayerZoneProps) {
+export function PlayerZone({ player, isCurrentPlayer, isHuman, isPreparing, cannotPlay, validMoves, bestMove, selectedCardIds, onCardClick, onSwap, isDebugMode = false }: PlayerZoneProps) {
   const [pendingSwap, setPendingSwap] = useState<{ card: Card; zone: 'hand' | 'visible' } | null>(null);
   const handEmpty = player.hand.length === 0;
   const visibleEmpty = player.visibleCards.length === 0;
@@ -90,7 +91,7 @@ export function PlayerZone({ player, isCurrentPlayer, isHuman, isPreparing, cann
     <div className="relative flex gap-1">
       {player.hiddenCards.map((c, i) => (
         <div key={c.id} className="relative">
-          <GameCard card={null} state={hiddenActive ? 'selected' : 'hidden'}
+          <GameCard card={isDebugMode ? c : null} state={isDebugMode ? 'normal' : (hiddenActive ? 'selected' : 'hidden')}
             onClick={hiddenActive ? () => onCardClick(c) : undefined} />
           {sortedVisible[i] && (
             <div className="absolute -top-2 left-0">
@@ -113,7 +114,7 @@ export function PlayerZone({ player, isCurrentPlayer, isHuman, isPreparing, cann
         {tableCards}
         {player.hand.length > 0 && (
           <div className="flex items-center">
-            <FanRow cards={displayHand} isHidden validMoves={[]} bestMove={null} selectedIds={[]} onCardClick={() => {}} />
+            <FanRow cards={displayHand} isHidden={!isDebugMode} validMoves={[]} bestMove={null} selectedIds={[]} onCardClick={() => {}} />
             {extra > 0 && <span className="text-white/60 text-xs ml-1">+{extra}</span>}
           </div>
         )}

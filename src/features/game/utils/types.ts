@@ -45,6 +45,11 @@ export interface RulesConfig {
   mode: 'patriarchal' | 'matriarchal';
 }
 
+export interface LogEntry {
+  turn: number;
+  actions: string[];
+}
+
 export interface GameState {
   phase: 'SETUP' | 'PREPARATION' | 'PLAYING' | 'FINISHED';
   players: Player[];
@@ -59,6 +64,7 @@ export interface GameState {
   bestMove: Card | null;
   emotes: { playerId: string; emote: string; timestamp: number }[];
   finishOrder: string[];
+  log?: LogEntry[];
 }
 
 export type BotDifficulty = 'easy' | 'medium' | 'hard';
