@@ -25,7 +25,7 @@ const FUN_MESSAGES: Partial<Record<Card['rank'] | '4-of-a-kind', string[]>> = {
 
 export function GameBoard() {
   const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn,
-    takePile, passTurn, undoLastMove, stateHistory, sendEmote, resetGame, startGame, difficulty } = useGameStore();
+    takePile, passTurn, undoLastMove, stateHistory, sendEmote, resetGame, startGame, difficulty, isDebugMode } = useGameStore();
   const [pendingAce, setPendingAce] = useState<Card | null>(null);
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
   const [hiddenPending, setHiddenPending] = useState<Card | null>(null);
@@ -202,7 +202,7 @@ export function GameBoard() {
       <div className="relative flex justify-center">
         <Bubble id={player.id} />
         <PlayerZone player={player} isCurrentPlayer={currentPlayerIndex === idx} isHuman={false}
-          isPreparing={false} cannotPlay={false} validMoves={[]} bestMove={null} selectedCardIds={[]} onCardClick={() => {}} onSwap={() => {}} />
+          isPreparing={false} cannotPlay={false} validMoves={[]} bestMove={null} selectedCardIds={[]} onCardClick={() => {}} onSwap={() => {}} isDebugMode={isDebugMode} />
         {pendingAce && <button onClick={() => { playCards(selectedCards, player.id); setPendingAce(null); setSelectedCards([]); }}
           className="absolute inset-0 flex items-center justify-center bg-red-500/40 hover:bg-red-500/60 rounded-lg border-2 border-red-400 transition-colors">
           <span className="text-white font-bold text-sm drop-shadow">⚔ Attaquer</span></button>}
@@ -266,7 +266,7 @@ export function GameBoard() {
           <PlayerZone player={human} isCurrentPlayer={currentPlayerIndex === 0} isHuman={true}
             isPreparing={isPreparing} cannotPlay={cannotPlay} validMoves={pendingAce ? [] : validMoves}
             bestMove={pendingAce ? null : bestMove} selectedCardIds={selectedCards.map(c => c.id)}
-            onCardClick={handleCardClick} onSwap={swapCard} />
+            onCardClick={handleCardClick} onSwap={swapCard} isDebugMode={isDebugMode} />
           {isPreparing && <div className="px-4 py-3 bg-black/50 rounded-lg border border-yellow-500/40 flex flex-col items-center gap-2"><p className="text-yellow-300 text-sm font-medium">Phase de préparation — échangez vos cartes</p><button className="px-5 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded text-sm" onClick={setReady}>Je suis prêt ✓</button></div>}
           {pendingAce && <div className="px-4 py-2 bg-black/60 rounded-lg border border-red-400/60 flex items-center gap-3"><span className="text-red-300 text-sm font-medium">Choisissez un joueur à attaquer</span><button className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white text-sm rounded" onClick={() => setPendingAce(null)}>Annuler</button></div>}
         </div>

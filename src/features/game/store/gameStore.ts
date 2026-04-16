@@ -133,6 +133,7 @@ interface GameStore {
   stateHistory: GameState[];
   difficulty: BotDifficulty;
   isPlayerTurn: boolean;
+  isDebugMode: boolean;
 
   startGame: (playerName: string, difficulty: BotDifficulty) => void;
   playCards: (cards: Card[], targetId?: string | null) => boolean;
@@ -144,6 +145,7 @@ interface GameStore {
   resetGame: () => void;
   passTurn: () => void;
   sendEmote: (playerId: string, emote: string) => void;
+  setDebugMode: (v: boolean) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -152,6 +154,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   stateHistory: [],
   difficulty: 'medium',
   isPlayerTurn: false,
+  isDebugMode: false,
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -416,8 +419,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetGame: () => {
-    set({ gameState: null, stateHistory: [], isPlayerTurn: false });
+    set({ gameState: null, stateHistory: [], isPlayerTurn: false, isDebugMode: false });
   },
+
+  setDebugMode: (v) => set({ isDebugMode: v }),
 
   passTurn: () => {
     const gs = get().gameState;

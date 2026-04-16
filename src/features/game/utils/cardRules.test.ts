@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidPlay, getEffectiveValue, applyPlay, getValidMoves, getBestMove, initGame } from '@/features/game/utils/cardRules';
+import { isValidPlay, getEffectiveValue, applyPlay, getValidMoves, getBestMove, getBotMove, initGame } from '@/features/game/utils/cardRules';
 import { createDeck } from '@/features/game/utils/deck';
 import type { Card, GameState, Player, TurnContext, RulesConfig } from '@/features/game/utils/types';
 
@@ -240,6 +240,25 @@ describe('card J', () => {
     const five = c('5');
     const state = makeState([five], { mustPlayDouble: true, lastEffectiveCard: five });
     expect(isValidPlay([c('2', 'hearts'), c('2', 'spades')], state)).toBe(true);
+  });
+
+  // BUG: single 10 must not satisfy mustPlayDouble — only a pair of 10s does.
+  it('invalid — single 10 under mustPlayDouble (10 is not a Jack exception)', () => {
+    const five = c('5');
+    const state = makeState([five], { mustPlayDouble: true, lastEffectiveCard: five });
+    expect(isValidPlay([c('10')], state)).toBe(false);
+  });
+
+  it('valid — pair of 10s satisfies mustPlayDouble (and cuts the pile)', () => {
+    const five = c('5');
+    const state = makeState([five], { mustPlayDouble: true, lastEffectiveCard: five });
+    expect(isValidPlay([c('10', 'hearts'), c('10', 'spades')], state)).toBe(true);
+  });
+
+  it('valid — single J still satisfies mustPlayDouble after another J', () => {
+    const jackH = c('J', 'hearts');
+    const state = makeState([jackH], { mustPlayDouble: true, lastEffectiveCard: jackH });
+    expect(isValidPlay([c('J', 'spades')], state)).toBe(true);
   });
 });
 
@@ -750,6 +769,42 @@ describe('applyPlay — card 3 mirrors full effect of previous card', () => {
   });
 });
 
+// ── Diagnostic — 2x3 mirror propagation ────────────────────────────────────
+// Both scenarios verify that a pair of 3s mirrors the FULL effect of the
+// previous card (J or 7) onto the next player's turn context.
+
+describe('diagnostic — 2x3 mirror propagation', () => {
+  it('2x3 after J keeps mustPlayDouble = true', () => {
+    const jack = c('J', 'hearts');
+    const three1 = c('3', 'spades');
+    const three2 = c('3', 'hearts');
+    const p0 = makePlayer('p0', [jack, c('5', 'hearts'), c('6', 'hearts')]);
+    const p1 = makePlayer('p1', [three1, three2, c('5', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    const state = makeApplyState([p0, p1, p2], 1, {
+      pile: [jack],
+      context: { mustPlayDouble: true, lastEffectiveCard: jack },
+    });
+    const next = applyPlay([three1, three2], null, state);
+    expect(next.turnContext.mustPlayDouble).toBe(true);
+  });
+
+  it('2x3 after 7 keeps mustPlayBelow7 = true', () => {
+    const seven = c('7', 'hearts');
+    const three1 = c('3', 'spades');
+    const three2 = c('3', 'hearts');
+    const p0 = makePlayer('p0', [seven, c('5', 'hearts'), c('6', 'hearts')]);
+    const p1 = makePlayer('p1', [three1, three2, c('5', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    const state = makeApplyState([p0, p1, p2], 1, {
+      pile: [seven],
+      context: { mustPlayBelow7: true, lastEffectiveCard: seven },
+    });
+    const next = applyPlay([three1, three2], null, state);
+    expect(next.turnContext.mustPlayBelow7).toBe(true);
+  });
+});
+
 // ── Card 8 ─────────────────────────────────────────────────────────────────
 
 describe('applyPlay — card 8', () => {
@@ -1034,6 +1089,40 @@ describe('getBestMove — heuristic', () => {
     const state = makeState([aceH], { lastEffectiveCard: aceH });
     const best = getBestMove(player, state);
     expect(best?.rank).toBe('2');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// getBotMove
+// ══════════════════════════════════════════════════════════════════════════════
+
+describe('getBotMove — returned card always belongs to bot zone', () => {
+  it('under mustPlayBelow7, plays a card physically in the bot hand', () => {
+    // Hand [A♦, A♣, 5♠, 7♠] — under mustPlayBelow7 only 5♠ and 7♠ are legal.
+    // The chosen card's id must be one of those — never outside the hand.
+    const hand = [
+      c('A', 'diamonds'),
+      c('A', 'clubs'),
+      c('5', 'spades'),
+      c('7', 'spades'),
+    ];
+    const bot: Player = { ...makePlayer('bot', hand), isBot: true };
+    const pileTop = c('7', 'hearts');
+    const state = makeState([pileTop], { mustPlayBelow7: true, lastEffectiveCard: pileTop });
+
+    const handIds = new Set(hand.map(card => card.id));
+    const legalIds = new Set([c('5', 'spades').id, c('7', 'spades').id]);
+
+    for (const difficulty of ['easy', 'medium', 'hard'] as const) {
+      for (let i = 0; i < 20; i++) {
+        const played = getBotMove(bot, state, difficulty);
+        expect(played.length).toBeGreaterThan(0);
+        for (const card of played) {
+          expect(handIds.has(card.id)).toBe(true);
+          expect(legalIds.has(card.id)).toBe(true);
+        }
+      }
+    }
   });
 });
 

@@ -16,11 +16,7 @@ export function EmoteWheel({ onEmote }: Props) {
   }, [open]);
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(o => !o)} className="text-xl p-1 hover:scale-110 transition-transform">
-        😊
-      </button>
-      {open && (
+    <div className="relative"> (
         <div className="absolute bottom-8 left-0 grid grid-cols-2 gap-3 p-4 bg-black/80 rounded-xl border border-white/20 w-fit min-w-[120px] z-20">
           {EMOTES.map(e => (
             <button key={e} onClick={() => { onEmote(e); setOpen(false); }}
@@ -29,7 +25,8 @@ export function EmoteWheel({ onEmote }: Props) {
             </button>
           ))}
         </div>
-      )}
+      )
+      
     </div>
   );
 }

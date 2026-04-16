@@ -116,12 +116,15 @@ export function isValidPlay(cards: Card[], state: GameState): boolean {
   const { turnContext, pile, config } = state;
 
   // ── 1. 10 ────────────────────────────────────────────────────────────────
-  // 10 cuts the pile and overrides every constraint, with two exceptions:
+  // 10 cuts the pile and overrides every constraint, with three exceptions:
   //   a) forbidden after a 7 (mustPlayBelow7)
   //   b) forbidden after a 6 if the 10 does not match the required suit
+  //   c) under Jack rule, a single 10 does not satisfy the doublon — only a
+  //      pair of 10s (which still cuts) is legal
   if (rank === '10') {
     if (turnContext.mustPlayBelow7) return false;
     if (turnContext.mustFollowSuit !== null && card.suit !== turnContext.mustFollowSuit) return false;
+    if (turnContext.mustPlayDouble && cards.length < 2) return false;
     return true;
   }
 
@@ -513,10 +516,40 @@ export function getBestMove(player: Player, state: GameState): Card | null {
   const valid = getValidMoves(player, state);
   if (valid.length === 0) return null;
 
-  // Prefer the weakest valid normal card
-  const normals = valid.filter(c => !HOLD_RANKS.has(c.rank));
+  // Active zone — used to count copies per rank for pair detection.
+  const zone =
+    player.hand.length > 0
+      ? player.hand
+      : player.visibleCards.length > 0
+        ? player.visibleCards
+        : player.hiddenCards;
+
+  // '3' (effective value 0) would otherwise win the weakest-card contest
+  // every time, but it's a mirror card and best saved for defensive use
+  // (mirroring a 6's suit constraint, countering an Ace, mirroring under the
+  // 7 rule). Filter it out of the normals pool unconditionally; the
+  // last-resort fallback below still surfaces it when it's the only option,
+  // covering the four release cases:
+  //   1. mustFollowSuit + no other same-suit card → mirror via 3
+  //   2. attackTarget === player.id + no other valid card → defensive 3
+  //   3. mustPlayBelow7 + no other BELOW_7 card → forced 3
+  //   4. Absolute last resort
+  // Prefer the weakest valid normal card, but favour a valid PAIR over a
+  // single when the bot has 2+ of the same normal rank in its zone — doubles
+  // empty the hand faster and set up 4-of-a-kind cuts. Specials (HOLD_RANKS)
+  // stay filtered out of the pair consideration so we don't double-spend them.
+  const normals = valid.filter(c => {
+    if (HOLD_RANKS.has(c.rank)) return false;
+    if (c.rank === '3') return false;
+    return true;
+  });
   if (normals.length > 0) {
-    return normals.reduce((best, card) =>
+    const pairables = normals.filter(c => {
+      const sameRank = zone.filter(z => z.rank === c.rank);
+      return sameRank.length >= 2 && isValidPlay(sameRank.slice(0, 2), state);
+    });
+    const pool = pairables.length > 0 ? pairables : normals;
+    return pool.reduce((best, card) =>
       getEffectiveValue(card, state.config) < getEffectiveValue(best, state.config) ? card : best,
     );
   }
@@ -545,6 +578,10 @@ export function getBestMove(player: Player, state: GameState): Card | null {
   const two = valid.find(c => c.rank === '2');
   if (two) return two;
   if (ace) return ace;
+  // '3' is held above by default — surface it here as the absolute last
+  // resort or for forced-mirror scenarios (only legal card available).
+  const three = valid.find(c => c.rank === '3');
+  if (three) return three;
 
   return null; // unreachable if valid.length > 0, but satisfies TS
 }
@@ -649,11 +686,18 @@ export function getBotMove(
         ? bot.visibleCards
         : bot.hiddenCards;
 
-  // Under mustPlayDouble, play a pair when the zone has two of the same rank
+  // Resolve picked against the bot's own zone by rank — guards against any
+  // code path that could hand back a card object not physically in the zone.
   const sameRank = zone.filter(c => c.rank === picked.rank);
-  if (state.turnContext.mustPlayDouble && sameRank.length >= 2) {
+  const actualCard = sameRank[0] ?? picked;
+
+  // Unified pair promotion: play a pair whenever the zone has 2+ of the
+  // picked rank AND the pair is legal. Covers both the voluntary double
+  // (empties hand faster, sets up 4-of-a-kind) and the mustPlayDouble
+  // (Jack rule) case.
+  if (sameRank.length >= 2 && isValidPlay(sameRank.slice(0, 2), state)) {
     return sameRank.slice(0, 2);
   }
 
-  return [picked];
+  return [actualCard];
 }

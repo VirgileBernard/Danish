@@ -104,6 +104,10 @@ export function DebugPage() {
   const [hand, setHand] = useState<Card[]>([]);
   const [visible, setVisible] = useState<Card[]>([]);
   const [hidden, setHidden] = useState<Card[]>([]);
+  // Shuffled source used by launch() for bot allocations. Defaults to the
+  // ordered deck; dealRandomly replaces it with a Fisher-Yates permutation so
+  // the preview cards and the bots come from the same randomised deck.
+  const [shuffledDeck, setShuffledDeck] = useState<Card[]>(() => [...ALL_CARDS]);
 
   // Pile card
   const [pileRank, setPileRank] = useState<Card['rank'] | null>(null);
@@ -129,6 +133,23 @@ export function DebugPage() {
     setList(prev => prev.some(c => c.id === card.id) ? prev.filter(c => c.id !== card.id) : [...prev, card]);
   }
 
+  function dealRandomly() {
+    // Fisher-Yates on a copy of the full 52-card deck. Slices 0–9 populate
+    // the human preview; 9–18 / 18–27 / 27–36 are the bot allocations used
+    // by launch() via shuffledDeck.
+    const arr = [...ALL_CARDS];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = tmp;
+    }
+    setShuffledDeck(arr);
+    setHand(arr.slice(0, 3));
+    setVisible(arr.slice(3, 6));
+    setHidden(arr.slice(6, 9));
+  }
+
   function launch() {
     setError(null);
 
@@ -146,7 +167,7 @@ export function DebugPage() {
     const reservedIds = new Set([...hand, ...visible, ...hidden].map(c => c.id));
     const pileCard: Card | null = pileRank ? findCard(pileRank, pileSuit) : null;
     if (pileCard) reservedIds.add(pileCard.id);
-    const shuffled = ALL_CARDS.filter(c => !reservedIds.has(c.id));
+    const shuffled = shuffledDeck.filter(c => !reservedIds.has(c.id));
 
     // Deal 9 cards per bot (3 hidden + 3 visible + 3 hand)
     const bot1Cards = shuffled.slice(0, 9);
@@ -198,9 +219,18 @@ export function DebugPage() {
       bestMove: getBestMove(players[0], gs),
     };
 
-    useGameStore.setState({ gameState: final, isPlayerTurn: true, stateHistory: [] });
+    useGameStore.setState({ gameState: final, isPlayerTurn: true, stateHistory: [], isDebugMode: true });
     // Push without reload to preserve Zustand state, then trigger App re-render
     window.history.pushState({}, '', '/game');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
+
+  function handleRetour(e: React.MouseEvent<HTMLAnchorElement>) {
+    // Leaving the debug page — drop the reveal-all flag so a normal game
+    // doesn't inherit it.
+    e.preventDefault();
+    useGameStore.getState().setDebugMode(false);
+    window.history.pushState({}, '', '/');
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 
@@ -208,7 +238,16 @@ export function DebugPage() {
     <div className="min-h-screen bg-gray-900 text-white p-6 max-w-4xl mx-auto flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Debug — Scenario Builder</h1>
-        <a href="/" className="text-sm text-gray-400 hover:text-white">Retour</a>
+        <a href="/" onClick={handleRetour} className="text-sm text-gray-400 hover:text-white">Retour</a>
+      </div>
+
+      <div className="flex items-center justify-end">
+        <button
+          onClick={dealRandomly}
+          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium rounded"
+        >
+          Distribuer au hasard
+        </button>
       </div>
 
       <CardGrid label="Ma main" selected={hand} disabled={new Set()} max={3} onToggle={c => toggle(setHand, c)} />
