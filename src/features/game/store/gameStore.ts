@@ -111,6 +111,7 @@ interface GameStore {
   takePile: () => void;
   undoLastMove: () => void;
   resetGame: () => void;
+  passTurn: () => void;
   sendEmote: (playerId: string, emote: string) => void;
 }
 
@@ -353,6 +354,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   resetGame: () => {
     set({ gameState: null, stateHistory: [], isPlayerTurn: false });
+  },
+
+  passTurn: () => {
+    const gs = get().gameState;
+    if (!gs || gs.phase !== 'PLAYING') return;
+    const human = gs.players[gs.currentPlayerIndex];
+    if (!human || human.isBot) return;
+    if (getValidMoves(human, gs).length > 0) return;
+    if (gs.pile.length > 0) return; // pile not empty — must takePile instead
+    const nextIndex = nextNonFinished(gs.players, gs.currentPlayerIndex);
+    const next = withDerivedFields({ ...gs, currentPlayerIndex: nextIndex });
+    set({ gameState: next, stateHistory: pushHistory(get().stateHistory, gs), isPlayerTurn: deriveIsPlayerTurn(next) });
   },
 
   sendEmote: (playerId, emote) => {

@@ -1,9 +1,11 @@
 // Entry point — routes between the major screens of the app.
 // Phase 1: game vs bots only. Phase 2 will add tournament + feed routes.
-import { useEffect } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { GameBoard } from '@/features/game/components/GameBoard';
 import { MemberCard } from '@/features/game/components/MemberCard';
 import { useGameStore } from '@/features/game/store/gameStore';
+
+const DebugPage = import.meta.env.DEV ? lazy(() => import('@/features/game/components/DebugPage').then(m => ({ default: m.DebugPage }))) : null;
 
 function GameRoute() {
   const { gameState, startGame } = useGameStore();
@@ -16,9 +18,15 @@ function GameRoute() {
 }
 
 function App() {
-  const path = window.location.pathname;
+  const [path, setPath] = useState(window.location.pathname);
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   if (path === '/game') return <GameRoute />;
   if (path === '/profile') return <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4"><MemberCard /></div>;
+  if (path === '/debug' && DebugPage) return <Suspense fallback={null}><DebugPage /></Suspense>;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">

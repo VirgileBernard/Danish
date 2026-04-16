@@ -789,6 +789,31 @@ describe('applyPlay — card A', () => {
   });
 });
 
+// ── 3 mirrors Ace ─────────────────────────────────────────────────────────
+
+describe('applyPlay — 3 after A', () => {
+  it('turn redirects to targetId chosen by the player who played the 3, not the original attack target', () => {
+    // p0 plays A targeting p1 → p1 must play
+    const ace = c('A', 'hearts');
+    const three = c('3', 'hearts');
+    const p0 = makePlayer('p0', [c('5', 'hearts'), c('6', 'hearts'), c('7', 'hearts')]);
+    const p1 = makePlayer('p1', [three, c('9', 'spades'), c('Q', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+
+    // State after p0 played A targeting p1: it's p1's turn
+    const state = makeApplyState([p0, p1, p2], 1, {
+      pile: [ace],
+      context: { lastEffectiveCard: ace, attackTarget: 'p1' },
+    });
+
+    // p1 plays 3 (mirrors Ace) and chooses p2 as target
+    const next = applyPlay([three], 'p2', state);
+
+    expect(next.currentPlayerIndex).toBe(2); // p2, not p1
+    expect(next.turnContext.attackTarget).toBe('p2');
+  });
+});
+
 // ── 4-of-a-kind ────────────────────────────────────────────────────────────
 
 describe('applyPlay — 4-of-a-kind auto-cut', () => {

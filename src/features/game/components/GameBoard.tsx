@@ -10,9 +10,11 @@ const EMOTES = ['😊', '😐', '😍', '😵'];
 
 export function GameBoard() {
   const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn,
-    takePile, undoLastMove, stateHistory, sendEmote, resetGame, startGame, difficulty } = useGameStore();
+    takePile, passTurn, undoLastMove, stateHistory, sendEmote, resetGame, startGame, difficulty } = useGameStore();
   const [pendingAce, setPendingAce] = useState<Card | null>(null);
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
+  const [hiddenPending, setHiddenPending] = useState<Card | null>(null);
+  const [revealingHidden, setRevealingHidden] = useState<Card | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [bubbles, setBubbles] = useState<Record<string, string>>({});
   const [invalidMsg, setInvalidMsg] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export function GameBoard() {
     return () => clearTimeout(t);
   }, [gameState, isPlayerTurn, triggerBotTurn]);
 
-  useEffect(() => { if (!isPlayerTurn) { setPendingAce(null); setSelectedCards([]); } }, [isPlayerTurn]);
+  useEffect(() => { if (!isPlayerTurn) { setPendingAce(null); setSelectedCards([]); setHiddenPending(null); setRevealingHidden(null); } }, [isPlayerTurn]);
   useEffect(() => {
     if (gameState?.phase !== 'PLAYING') { setGameStarted(false); return; }
     const t = setTimeout(() => setGameStarted(true), 500);
@@ -49,22 +51,47 @@ export function GameBoard() {
   const inHiddenMode = human.hand.length === 0 && human.visibleCards.length === 0 && human.hiddenCards.length > 0;
   const cannotPlay = gameStarted && isPlayerTurn && !isPreparing && !pendingAce
     && validMoves.length === 0 && !inHiddenMode;
+  const canPassTurn = cannotPlay && pile.length === 0;
   const pileTop3 = pile.slice(-3);
 
   function handleCardClick(card: Card) {
     if (isPreparing || !isPlayerTurn || pendingAce) return;
+    if (inHiddenMode) {
+      setHiddenPending(card);
+      return;
+    }
     setSelectedCards(prev => prev.some(c => c.id === card.id) ? prev.filter(c => c.id !== card.id)
       : prev.length > 0 && prev[0].rank !== card.rank ? [card] : [...prev, card]);
   }
 
   function handlePileClick() {
+    if (revealingHidden) return;
+    if (inHiddenMode) {
+      if (!hiddenPending) return;
+      const card = hiddenPending;
+      setHiddenPending(null);
+      setRevealingHidden(card);
+      window.setTimeout(() => {
+        setRevealingHidden(null);
+        if (card.rank === 'A') {
+          setSelectedCards([card]);
+          setPendingAce(card);
+        } else {
+          playCards([card]);
+        }
+      }, 700);
+      return;
+    }
     if (!selectedCards.length || pendingAce) return;
     if (selectedCards.some(c => c.rank === 'A')) {
       setPendingAce(selectedCards.find(c => c.rank === 'A')!); return;
     }
+    if (selectedCards.every(c => c.rank === '3') && turnContext.lastEffectiveCard?.rank === 'A') {
+      setPendingAce(selectedCards[0]); return;
+    }
     if (!playCards(selectedCards)) {
-      const top = pile.at(-1);
-      setInvalidMsg(`Tu ne peux pas jouer ${selectedCards[0].rank} sur ${top?.rank ?? 'vide'}`);
+      const effectiveCard = turnContext.lastEffectiveCard ?? pile.at(-1);
+      setInvalidMsg(`Tu ne peux pas jouer ${selectedCards[0].rank} sur ${effectiveCard?.rank ?? 'vide'}`);
       setTimeout(() => setInvalidMsg(null), 2500);
     } else { addLog(`Tu joues ${selectedCards[0].rank}`); setSelectedCards([]); }
   }
@@ -86,7 +113,7 @@ export function GameBoard() {
     );
   }
 
-  const pileRing = selectedCards.length > 0 && !pendingAce ? 'ring-2 ring-blue-400 animate-pulse' : '';
+  const pileRing = (selectedCards.length > 0 || hiddenPending) && !pendingAce ? 'ring-2 ring-blue-400 animate-pulse' : '';
 
   return (
     <div className="relative h-screen overflow-hidden bg-green-900 flex flex-col">
@@ -109,10 +136,11 @@ export function GameBoard() {
             <div className="flex flex-col items-center gap-1">
               <span className="text-white/60 text-xs">Pile ({pile.length})</span>
               <div className={`relative w-16 h-[89px] cursor-pointer rounded-md ${pileRing}`} onClick={handlePileClick}>
-                {pile.length === 0 && <GameCard card={null} state="empty" />}
+                {pile.length === 0 && !revealingHidden && <GameCard card={null} state="empty" />}
                 {pileTop3.length >= 3 && <div className="absolute inset-0 -rotate-6 -translate-x-4 opacity-60"><GameCard card={pileTop3[0]} state="normal" /></div>}
                 {pileTop3.length >= 2 && <div className="absolute inset-0 -rotate-3 -translate-x-2 opacity-80"><GameCard card={pileTop3[pileTop3.length - 2]} state="normal" /></div>}
                 {pileTop3.length >= 1 && <div className="absolute inset-0"><GameCard card={pileTop3[pileTop3.length - 1]} state="normal" /></div>}
+                {revealingHidden && <div className="absolute inset-0 ring-2 ring-yellow-400 rounded-md animate-pulse"><GameCard card={revealingHidden} state="normal" /></div>}
               </div>
             </div>
             <div className="flex flex-col items-center gap-1">
@@ -122,6 +150,7 @@ export function GameBoard() {
             </div>
           </div>
           {cannotPlay && pile.length > 0 && <button className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded text-sm ring-2 ring-red-400 animate-pulse" onClick={takePile}>Ramasser la pile 📥</button>}
+          {canPassTurn && <button className="px-5 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded text-sm ring-2 ring-yellow-400 animate-pulse" onClick={passTurn}>Passer son tour ⏭</button>}
           {invalidMsg && <div className="px-3 py-1 bg-red-900/80 text-red-200 text-xs rounded-full">{invalidMsg}</div>}
         </div>
         <BotZone player={bot3} idx={3} />
