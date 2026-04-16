@@ -267,7 +267,28 @@ function computeNextIndex(
   // 3 mirroring an 8 propagates the skip — N threes skip N players (same as N eights)
   const mirroredEight = rank === '3' && turnContext.lastEffectiveCard?.rank === '8';
   const skip = rank === '8' || mirroredEight ? cards.length : 0;
-  return (currentIndex + 1 + skip) % n;
+
+  // 8 skip: N eights skip N ACTIVE players. Finished slots don't consume
+  // the skip tally — walking a raw index offset can land on a finished
+  // player. Advance forward counting only non-finished players, so we land
+  // just past N active players who were skipped. Non-8 plays fall through
+  // to the default +1 advance (which the bottom-of-applyPlay loop still
+  // nudges past any finished slot).
+  if (skip > 0) {
+    let idx = currentIndex;
+    let activeAdvances = 0;
+    const target = skip + 1;
+    for (let i = 0; i < n * 2; i++) {
+      idx = (idx + 1) % n;
+      if (!players[idx]!.isFinished) {
+        activeAdvances++;
+        if (activeAdvances === target) return idx;
+      }
+    }
+    return idx;
+  }
+
+  return (currentIndex + 1) % n;
 }
 
 /**
@@ -294,6 +315,17 @@ export function applyPlay(
   const card = cards[0];
   const { turnContext, config } = state;
   const currentPlayer = state.players[state.currentPlayerIndex];
+
+  // Defensive: an Ace (or 3 mirroring an Ace) aimed at a finished player
+  // cannot attack — drop the target so the turn falls back to the next
+  // active player via the default advance. The UI should already exclude
+  // finished players from the attack selector; this is a safety net.
+  const resolvedTargetIdx =
+    targetId !== null ? state.players.findIndex(p => p.id === targetId) : -1;
+  const effectiveTargetId =
+    resolvedTargetIdx !== -1 && state.players[resolvedTargetIdx]!.isFinished
+      ? null
+      : targetId;
 
   // ── 1. Remove played cards from player zones ──────────────────────────────
   const playedIds = new Set(cards.map(c => c.id));
@@ -341,7 +373,7 @@ export function applyPlay(
 
       case '3': {
         const mirrored = turnContext.lastEffectiveCard;
-        newContext = buildThreeContext(base, mirrored, targetId, config, cards);
+        newContext = buildThreeContext(base, mirrored, effectiveTargetId, config, cards);
         break;
       }
 
@@ -370,7 +402,7 @@ export function applyPlay(
         break;
 
       case 'A':
-        newContext = { ...base, attackTarget: targetId };
+        newContext = { ...base, attackTarget: effectiveTargetId };
         break;
 
       default:
@@ -411,7 +443,7 @@ export function applyPlay(
   const rawNext = computeNextIndex(
     rank,
     isCut,
-    targetId,
+    effectiveTargetId,
     turnContext,
     state.players,
     state.currentPlayerIndex,
@@ -438,7 +470,7 @@ export function applyPlay(
   }
 
   // ── 10. Append action to log (grouped by round) ───────────────────────────
-  const suffix = effectSuffix(cards, state, targetId, isFourOfAKind);
+  const suffix = effectSuffix(cards, state, effectiveTargetId, isFourOfAKind);
   const actionText = `${currentPlayer.name} joue ${formatPlayedCards(cards)}${suffix}`;
   const newLog = appendLogAction(state.log, actionText, state.currentPlayerIndex);
 
@@ -557,8 +589,9 @@ export function getBestMove(player: Player, state: GameState): Card | null {
   // Only specials remain — apply hold heuristics
   const ace = valid.find(c => c.rank === 'A');
   if (ace) {
-    // Play Ace only when another player is clearly more advanced (fewest total cards)
-    const others = state.players.filter(p => p.id !== player.id);
+    // Play Ace only when another player is clearly more advanced (fewest total cards).
+    // Finished players are excluded — they cannot be attacked.
+    const others = state.players.filter(p => p.id !== player.id && !p.isFinished);
     if (others.length > 0) {
       const playerTotal =
         player.hand.length + player.visibleCards.length + player.hiddenCards.length;
@@ -679,17 +712,22 @@ export function getBotMove(
   }
 
   // Determine the bot's active zone (mirrors getValidMoves zone logic)
-  const zone =
-    bot.hand.length > 0
-      ? bot.hand
-      : bot.visibleCards.length > 0
-        ? bot.visibleCards
-        : bot.hiddenCards;
+  const isHiddenZone = bot.hand.length === 0 && bot.visibleCards.length === 0;
+  const zone = bot.hand.length > 0
+    ? bot.hand
+    : bot.visibleCards.length > 0
+      ? bot.visibleCards
+      : bot.hiddenCards;
 
   // Resolve picked against the bot's own zone by rank — guards against any
   // code path that could hand back a card object not physically in the zone.
   const sameRank = zone.filter(c => c.rank === picked.rank);
   const actualCard = sameRank[0] ?? picked;
+
+  // Hidden zone: cards are face-down, the bot cannot knowingly build a pair.
+  // Always flip a single card — even under mustPlayDouble, where the blind
+  // reveal will likely fail isValidPlay and trigger the sweep-into-hand path.
+  if (isHiddenZone) return [actualCard];
 
   // Unified pair promotion: play a pair whenever the zone has 2+ of the
   // picked rank AND the pair is legal. Covers both the voluntary double

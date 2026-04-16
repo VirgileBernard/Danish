@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BotDifficulty, Card, GameState, Player, TurnContext } from '@/features/game/utils/types';
+import type { BotDifficulty, Card, GameState, Player, RulesConfig, TurnContext } from '@/features/game/utils/types';
 import { BOT_PROFILES } from '@/features/game/data/botProfiles';
 import {
   initGame,
@@ -46,12 +46,13 @@ function makeHumanPlayer(name: string): Player {
   };
 }
 
-function makeBotPlayer(index: number): Player {
-  const profile = BOT_PROFILES[index - 1];
+type BotProfile = typeof BOT_PROFILES[number];
+
+function makeBotPlayer(index: number, profile: BotProfile): Player {
   return {
     id: `bot-${index}`,
-    name: profile?.name ?? `Bot ${index}`,
-    title: profile?.title ?? 'Joueur',
+    name: profile.name,
+    title: profile.title,
     isBot: true,
     isReady: true,
     isFinished: false,
@@ -60,6 +61,13 @@ function makeBotPlayer(index: number): Player {
     hiddenCards: [],
     stats: { gamesPlayed: 0, placements: [0, 0, 0, 0], achievements: [] },
   };
+}
+
+/** Returns `count` distinct bot profiles picked at random from BOT_PROFILES. */
+function pickRandomBotProfiles(count: number): BotProfile[] {
+  return [...BOT_PROFILES]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, count);
 }
 
 /** Total cards remaining for a player across all zones. */
@@ -146,6 +154,7 @@ interface GameStore {
   passTurn: () => void;
   sendEmote: (playerId: string, emote: string) => void;
   setDebugMode: (v: boolean) => void;
+  setRulesMode: (mode: RulesConfig['mode']) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -166,11 +175,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
    * The game starts in PREPARATION phase so the human can swap cards.
    */
   startGame: (playerName, difficulty) => {
+    const botProfiles = pickRandomBotProfiles(3);
     const players: Player[] = [
       makeHumanPlayer(playerName),
-      makeBotPlayer(1),
-      makeBotPlayer(2),
-      makeBotPlayer(3),
+      ...botProfiles.map((profile, i) => makeBotPlayer(i + 1, profile)),
     ];
     const gs = initGame(players, { mode: 'patriarchal' });
     set({ gameState: gs, difficulty, isPlayerTurn: deriveIsPlayerTurn(gs) });
@@ -423,6 +431,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   setDebugMode: (v) => set({ isDebugMode: v }),
+
+  /**
+   * Updates the rules mode (patriarchal ↔ matriarchal) during PREPARATION.
+   * Only allowed before PLAYING starts — mode is locked once cards are in play.
+   */
+  setRulesMode: (mode) => {
+    const gs = get().gameState;
+    if (!gs || gs.phase !== 'PREPARATION') return;
+    set({ gameState: { ...gs, config: { ...gs.config, mode } } });
+  },
 
   passTurn: () => {
     const gs = get().gameState;
