@@ -1,12 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/features/game/store/gameStore';
 import { useGameLog } from '@/features/game/hooks/useGameLog';
 import { PlayerZone } from './PlayerZone';
 import { GameCard } from './GameCard';
 import { EndScreen } from './EndScreen';
-import type { Card, Player } from '@/features/game/utils/types';
+import { LogPanel } from './LogPanel';
+import type { Card, GameState, Player } from '@/features/game/utils/types';
 
 const EMOTES = ['😊', '😐', '😍', '😵'];
+
+const BOT_DELAY_MS = { easy: 1200, medium: 2000, hard: 2500 } as const;
+
+// '4-of-a-kind' is a pseudo-rank key — its template uses {rank} as a placeholder
+// for the rank of the four cards that triggered the auto-cut.
+const FUN_MESSAGES: Partial<Record<Card['rank'] | '4-of-a-kind', string[]>> = {
+  '7': ['Tournée des 4 !', 'Il te reste des 4 ?'],
+  'J': ["T'as des doubles ?"],
+  '2': ['Tout le monde se calme !'],
+  '4': ['Je pose ça là...'],
+  '8': ['Passe ton tour sale noob'],
+  '10': ['Je fais ça pour vous (et un peu pour moi)'],
+  '4-of-a-kind': ['On remercie les {rank} !'],
+};
 
 export function GameBoard() {
   const { gameState, isPlayerTurn, playCards, swapCard, setReady, triggerBotTurn,
@@ -15,17 +30,82 @@ export function GameBoard() {
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
   const [hiddenPending, setHiddenPending] = useState<Card | null>(null);
   const [revealingHidden, setRevealingHidden] = useState<Card | null>(null);
+  const [cutReveal, setCutReveal] = useState<Card | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [bubbles, setBubbles] = useState<Record<string, string>>({});
   const [invalidMsg, setInvalidMsg] = useState<string | null>(null);
   const [showEnd, setShowEnd] = useState(true);
-  const { entries: gameLog, push: addLog } = useGameLog(gameState, isPlayerTurn);
+  const [funMsg, setFunMsg] = useState<string | null>(null);
+  const prevGsRef = useRef<GameState | null>(null);
+  const funTimerRef = useRef<number | null>(null);
+  const cutTimerRef = useRef<number | null>(null);
+  const { push: addLog } = useGameLog(gameState, isPlayerTurn);
+
+  useEffect(() => {
+    const prev = prevGsRef.current;
+    prevGsRef.current = gameState;
+    if (!prev || !gameState) return;
+
+    let rank: Card['rank'] | null = null;
+    let lastCard: Card | null = null;
+    if (gameState.pile.length > prev.pile.length) {
+      lastCard = gameState.pile.at(-1) ?? null;
+      rank = lastCard?.rank ?? null;
+    } else if (gameState.discard.length > prev.discard.length) {
+      lastCard = gameState.discard.at(-1) ?? null;
+      rank = lastCard?.rank ?? null;
+    }
+
+    // Bot 10 cut visual: bot just cut with a 10, stage 700ms overlay so the 10
+    // is visible on top of the pile before the display clears. Human 10 plays
+    // are intercepted in handlePileClick and don't go through here.
+    const botCut =
+      prev.currentPlayerIndex !== 0 &&
+      gameState.discard.length > prev.discard.length &&
+      prev.pile.length > 0 &&
+      gameState.pile.length === 0 &&
+      lastCard?.rank === '10';
+    if (botCut && lastCard) {
+      if (cutTimerRef.current !== null) window.clearTimeout(cutTimerRef.current);
+      setCutReveal(lastCard);
+      cutTimerRef.current = window.setTimeout(() => {
+        setCutReveal(null);
+        cutTimerRef.current = null;
+      }, 700);
+    }
+
+    // 4-of-a-kind takes priority over per-rank messages: cuts are detected by
+    // discard growth, and any cut whose top card isn't a 10 must be an auto-cut.
+    const isCut = gameState.discard.length > prev.discard.length;
+    const fourOfAKindCut = isCut && lastCard !== null && lastCard.rank !== '10';
+
+    let msg: string | null = null;
+    if (fourOfAKindCut && lastCard) {
+      const templates = FUN_MESSAGES['4-of-a-kind'];
+      if (templates) {
+        msg = templates[Math.floor(Math.random() * templates.length)].replace('{rank}', lastCard.rank);
+      }
+    } else if (rank) {
+      const templates = FUN_MESSAGES[rank];
+      if (templates) {
+        msg = templates[Math.floor(Math.random() * templates.length)];
+      }
+    }
+    if (!msg) return;
+
+    if (funTimerRef.current !== null) window.clearTimeout(funTimerRef.current);
+    setFunMsg(msg);
+    funTimerRef.current = window.setTimeout(() => {
+      setFunMsg(null);
+      funTimerRef.current = null;
+    }, 3000);
+  }, [gameState]);
 
   useEffect(() => {
     if (!gameState || gameState.phase !== 'PLAYING' || isPlayerTurn) return;
-    const t = setTimeout(triggerBotTurn, 800);
+    const t = setTimeout(triggerBotTurn, BOT_DELAY_MS[difficulty]);
     return () => clearTimeout(t);
-  }, [gameState, isPlayerTurn, triggerBotTurn]);
+  }, [gameState, isPlayerTurn, triggerBotTurn, difficulty]);
 
   useEffect(() => { if (!isPlayerTurn) { setPendingAce(null); setSelectedCards([]); setHiddenPending(null); setRevealingHidden(null); } }, [isPlayerTurn]);
   useEffect(() => {
@@ -65,7 +145,7 @@ export function GameBoard() {
   }
 
   function handlePileClick() {
-    if (revealingHidden) return;
+    if (revealingHidden || cutReveal) return;
     if (inHiddenMode) {
       if (!hiddenPending) return;
       const card = hiddenPending;
@@ -88,6 +168,23 @@ export function GameBoard() {
     }
     if (selectedCards.every(c => c.rank === '3') && turnContext.lastEffectiveCard?.rank === 'A') {
       setPendingAce(selectedCards[0]); return;
+    }
+    // Bug 1: stage 700ms pause so the 10 is visible on top of the pile before
+    // applyPlay cuts it into the discard. Same pattern as the Ace hidden-reveal fix.
+    if (selectedCards[0].rank === '10') {
+      const tens = selectedCards;
+      if (cutTimerRef.current !== null) window.clearTimeout(cutTimerRef.current);
+      setCutReveal(tens[tens.length - 1]);
+      cutTimerRef.current = window.setTimeout(() => {
+        setCutReveal(null);
+        cutTimerRef.current = null;
+        if (!playCards(tens)) {
+          const effectiveCard = turnContext.lastEffectiveCard ?? pile.at(-1);
+          setInvalidMsg(`Tu ne peux pas jouer ${tens[0].rank} sur ${effectiveCard?.rank ?? 'vide'}`);
+          setTimeout(() => setInvalidMsg(null), 2500);
+        } else { addLog(`Tu joues ${tens[0].rank}`); setSelectedCards([]); }
+      }, 700);
+      return;
     }
     if (!playCards(selectedCards)) {
       const effectiveCard = turnContext.lastEffectiveCard ?? pile.at(-1);
@@ -131,16 +228,22 @@ export function GameBoard() {
       {/* ── Row 2 : Centre — compressible, min 14vh ── */}
       <div className="flex items-center justify-center gap-12" style={{ minHeight: '14vh', flex: '1 1 0%' }}>
         <BotZone player={bot1} idx={1} />
-        <div className="flex flex-col items-center gap-2">
+        <div className="relative flex flex-col items-center gap-2">
+          {funMsg && (
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-20 px-4 py-2 bg-black/80 text-yellow-200 text-sm font-medium italic rounded-full border border-yellow-400/50 shadow-lg whitespace-nowrap animate-pulse">
+              {funMsg}
+            </div>
+          )}
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-center gap-1">
               <span className="text-white/60 text-xs">Pile ({pile.length})</span>
               <div className={`relative w-16 h-[89px] cursor-pointer rounded-md ${pileRing}`} onClick={handlePileClick}>
-                {pile.length === 0 && !revealingHidden && <GameCard card={null} state="empty" />}
+                {pile.length === 0 && !revealingHidden && !cutReveal && <GameCard card={null} state="empty" />}
                 {pileTop3.length >= 3 && <div className="absolute inset-0 -rotate-6 -translate-x-4 opacity-60"><GameCard card={pileTop3[0]} state="normal" /></div>}
                 {pileTop3.length >= 2 && <div className="absolute inset-0 -rotate-3 -translate-x-2 opacity-80"><GameCard card={pileTop3[pileTop3.length - 2]} state="normal" /></div>}
                 {pileTop3.length >= 1 && <div className="absolute inset-0"><GameCard card={pileTop3[pileTop3.length - 1]} state="normal" /></div>}
                 {revealingHidden && <div className="absolute inset-0 ring-2 ring-yellow-400 rounded-md animate-pulse"><GameCard card={revealingHidden} state="normal" /></div>}
+                {cutReveal && <div className="absolute inset-0 ring-2 ring-orange-400 rounded-md animate-pulse"><GameCard card={cutReveal} state="normal" /></div>}
               </div>
             </div>
             <div className="flex flex-col items-center gap-1">
@@ -181,12 +284,8 @@ export function GameBoard() {
           ))}
         </div>
 
-        {/* Game log — bottom-right */}
-        <div className="flex flex-col gap-1.5" style={{ width: 300 }}>
-          {gameLog.slice(0, 4).map((entry, i) => (
-            <div key={i} className={`px-3 py-2 rounded-lg text-base ${i === 0 ? 'bg-black/70 text-white' : 'bg-black/40 text-white/60'}`}>{entry}</div>
-          ))}
-        </div>
+        {/* Structured turn log — bottom-right */}
+        <LogPanel log={gameState.log ?? []} />
       </div>
     </div>
   );

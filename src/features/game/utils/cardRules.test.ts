@@ -649,6 +649,28 @@ describe('applyPlay — card 3 mirrors full effect of previous card', () => {
     expect(next.currentPlayerIndex).toBe(3);
   });
 
+  // Case A2: three 3s after an 8 → skips 3 players (mirrors N-eights-skip-N rule)
+  it('Case A2 — [3,3,3] after 8 sets skippedPlayers: 3 and skips 3 players', () => {
+    const eight = c('8', 'hearts');
+    const three1 = c('3', 'hearts');
+    const three2 = c('3', 'spades');
+    const three3 = c('3', 'clubs');
+    // p1 keeps a 4th card so they don't auto-finish after playing 3 threes
+    const p0 = makePlayer('p0', [eight, c('5', 'hearts'), c('6', 'hearts')]);
+    const p1 = makePlayer('p1', [three1, three2, three3, c('9', 'spades')]);
+    const p2 = makePlayer('p2', [c('4', 'clubs'), c('5', 'clubs'), c('6', 'clubs')]);
+    const p3 = makePlayer('p3', [c('Q', 'diamonds'), c('K', 'diamonds'), c('A', 'diamonds')]);
+    // p1 plays 3×3 after the 8 that p0 played
+    const state = makeApplyState([p0, p1, p2, p3], 1, {
+      pile: [eight],
+      context: { lastEffectiveCard: eight },
+    });
+    const next = applyPlay([three1, three2, three3], null, state);
+    expect(next.turnContext.skippedPlayers).toBe(3);
+    // p2, p3, p0 skipped → lands back on p1 (index 1). (1+1+3) % 4 = 1
+    expect(next.currentPlayerIndex).toBe(1);
+  });
+
   // Case B: 3 after J → mustPlayDouble propagated to next player
   // NB: single 3 under mustPlayDouble is invalid after BUG 1 fix; applyPlay does not
   // validate — this test exercises context propagation only (use a pair in real gameplay).

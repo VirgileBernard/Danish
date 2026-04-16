@@ -1,5 +1,77 @@
-import type { BotDifficulty, Card, GameState, Player, RulesConfig, TurnContext } from '@/features/game/utils/types';
+import type { BotDifficulty, Card, GameState, LogEntry, Player, RulesConfig, TurnContext } from '@/features/game/utils/types';
 import { createDeck } from '@/features/game/utils/deck';
+
+const SUIT_GLYPH: Record<Card['suit'], string> = {
+  hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠',
+};
+
+function formatPlayedCards(cards: Card[]): string {
+  return cards.map(card => `${card.rank}${SUIT_GLYPH[card.suit]}`).join(' ');
+}
+
+function effectSuffix(
+  cards: Card[],
+  state: GameState,
+  targetId: string | null,
+  isFourOfAKind: boolean,
+): string {
+  const rank = cards[0].rank;
+  const n = state.players.length;
+
+  if (isFourOfAKind) return ' — carré ! coupe !';
+  if (rank === '10') return ' — coupe !';
+
+  switch (rank) {
+    case '8': {
+      const skipIdx = (state.currentPlayerIndex + 1) % n;
+      const skipped = state.players[skipIdx];
+      return skipped ? ` — ${skipped.name} passe !` : '';
+    }
+    case 'J':
+      return ' — doublon obligatoire !';
+    case '7':
+      return ' — en dessous de 7 !';
+    case '6': {
+      const lastSix = cards[cards.length - 1];
+      return ` — suit ${SUIT_GLYPH[lastSix.suit]} obligatoire !`;
+    }
+    case '2':
+      return ' — remise à zéro !';
+    case 'A': {
+      if (!targetId) return '';
+      const target = state.players.find(p => p.id === targetId);
+      return target ? ` — attaque ${target.name} !` : '';
+    }
+    default:
+      return '';
+  }
+}
+
+/**
+ * Append an action string to the game log.
+ *
+ * Turn grouping rule: a "turn" is one full round (all active players have
+ * acted once). The round starts when currentPlayerIndex wraps back to 0.
+ * We push a new LogEntry when the acting player's index is 0 AND the current
+ * (last) LogEntry already has at least one action; otherwise we append to the
+ * current LogEntry.
+ */
+export function appendLogAction(
+  log: LogEntry[] | undefined,
+  action: string,
+  actingIndex: number,
+): LogEntry[] {
+  const prev = log ?? [];
+  const last = prev[prev.length - 1];
+  const startNewTurn = actingIndex === 0 && (last?.actions.length ?? 0) >= 1;
+  if (!last || startNewTurn) {
+    return [...prev, { turn: prev.length + 1, actions: [action] }];
+  }
+  return [
+    ...prev.slice(0, -1),
+    { ...last, actions: [...last.actions, action] },
+  ];
+}
 
 // Ranks whose face value is ≤ 7 — the only ranks legal under the 7 rule.
 // 10 is NOT allowed under the 7 rule (handled explicitly in the 10 branch).
@@ -145,6 +217,7 @@ function buildThreeContext(
   mirrored: Card | null,
   targetId: string | null,
   config: RulesConfig,
+  cards: Card[],
 ): TurnContext {
   // Mirror the grandparent card's FULL effect forward (value + all context flags)
   return {
@@ -158,8 +231,8 @@ function buildThreeContext(
     mustPlayBelow7: mirrored?.rank === '7',
     // J → next player must still play a double
     mustPlayDouble: mirrored?.rank === 'J',
-    // 8 → next player is skipped (advancement handled below)
-    skippedPlayers: mirrored?.rank === '8' ? 1 : 0,
+    // 8 → N threes skip N players (advancement handled below)
+    skippedPlayers: mirrored?.rank === '8' ? cards.length : 0,
     // A → the player who plays the 3 chooses their own target
     attackTarget: mirrored?.rank === 'A' ? targetId : null,
   };
@@ -188,9 +261,9 @@ function computeNextIndex(
     const found = players.findIndex(p => p.id === targetId);
     return found !== -1 ? found : (currentIndex + 1) % n;
   }
-  // 3 mirroring an 8 propagates the skip (turnContext still holds the pre-play state)
+  // 3 mirroring an 8 propagates the skip — N threes skip N players (same as N eights)
   const mirroredEight = rank === '3' && turnContext.lastEffectiveCard?.rank === '8';
-  const skip = rank === '8' ? cards.length : mirroredEight ? 1 : 0;
+  const skip = rank === '8' || mirroredEight ? cards.length : 0;
   return (currentIndex + 1 + skip) % n;
 }
 
@@ -265,7 +338,7 @@ export function applyPlay(
 
       case '3': {
         const mirrored = turnContext.lastEffectiveCard;
-        newContext = buildThreeContext(base, mirrored, targetId, config);
+        newContext = buildThreeContext(base, mirrored, targetId, config, cards);
         break;
       }
 
@@ -361,6 +434,11 @@ export function applyPlay(
     }
   }
 
+  // ── 10. Append action to log (grouped by round) ───────────────────────────
+  const suffix = effectSuffix(cards, state, targetId, isFourOfAKind);
+  const actionText = `${currentPlayer.name} joue ${formatPlayedCards(cards)}${suffix}`;
+  const newLog = appendLogAction(state.log, actionText, state.currentPlayerIndex);
+
   return {
     ...state,
     phase: finalPhase,
@@ -373,6 +451,7 @@ export function applyPlay(
     finishOrder: finalFinishOrder,
     validMoves: [],
     bestMove: null,
+    log: newLog,
   };
 }
 
@@ -524,6 +603,7 @@ export function initGame(players: Player[], config: RulesConfig): GameState {
     bestMove: null,
     emotes: [],
     finishOrder: [],
+    log: [],
   };
 }
 
