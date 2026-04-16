@@ -14,6 +14,7 @@ export function GameBoard() {
   const [pendingAce, setPendingAce] = useState<Card | null>(null);
   const [selectedCards, setSelectedCards] = useState<Card[]>([]);
   const [hiddenPending, setHiddenPending] = useState<Card | null>(null);
+  const [revealingHidden, setRevealingHidden] = useState<Card | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [bubbles, setBubbles] = useState<Record<string, string>>({});
   const [invalidMsg, setInvalidMsg] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export function GameBoard() {
     return () => clearTimeout(t);
   }, [gameState, isPlayerTurn, triggerBotTurn]);
 
-  useEffect(() => { if (!isPlayerTurn) { setPendingAce(null); setSelectedCards([]); setHiddenPending(null); } }, [isPlayerTurn]);
+  useEffect(() => { if (!isPlayerTurn) { setPendingAce(null); setSelectedCards([]); setHiddenPending(null); setRevealingHidden(null); } }, [isPlayerTurn]);
   useEffect(() => {
     if (gameState?.phase !== 'PLAYING') { setGameStarted(false); return; }
     const t = setTimeout(() => setGameStarted(true), 500);
@@ -64,12 +65,22 @@ export function GameBoard() {
   }
 
   function handlePileClick() {
+    if (revealingHidden) return;
     if (inHiddenMode) {
       if (!hiddenPending) return;
-      if (hiddenPending.rank === 'A') {
-        setSelectedCards([hiddenPending]); setPendingAce(hiddenPending); setHiddenPending(null); return;
-      }
-      playCards([hiddenPending]); setHiddenPending(null); return;
+      const card = hiddenPending;
+      setHiddenPending(null);
+      setRevealingHidden(card);
+      window.setTimeout(() => {
+        setRevealingHidden(null);
+        if (card.rank === 'A') {
+          setSelectedCards([card]);
+          setPendingAce(card);
+        } else {
+          playCards([card]);
+        }
+      }, 700);
+      return;
     }
     if (!selectedCards.length || pendingAce) return;
     if (selectedCards.some(c => c.rank === 'A')) {
@@ -125,10 +136,11 @@ export function GameBoard() {
             <div className="flex flex-col items-center gap-1">
               <span className="text-white/60 text-xs">Pile ({pile.length})</span>
               <div className={`relative w-16 h-[89px] cursor-pointer rounded-md ${pileRing}`} onClick={handlePileClick}>
-                {pile.length === 0 && <GameCard card={null} state="empty" />}
+                {pile.length === 0 && !revealingHidden && <GameCard card={null} state="empty" />}
                 {pileTop3.length >= 3 && <div className="absolute inset-0 -rotate-6 -translate-x-4 opacity-60"><GameCard card={pileTop3[0]} state="normal" /></div>}
                 {pileTop3.length >= 2 && <div className="absolute inset-0 -rotate-3 -translate-x-2 opacity-80"><GameCard card={pileTop3[pileTop3.length - 2]} state="normal" /></div>}
                 {pileTop3.length >= 1 && <div className="absolute inset-0"><GameCard card={pileTop3[pileTop3.length - 1]} state="normal" /></div>}
+                {revealingHidden && <div className="absolute inset-0 ring-2 ring-yellow-400 rounded-md animate-pulse"><GameCard card={revealingHidden} state="normal" /></div>}
               </div>
             </div>
             <div className="flex flex-col items-center gap-1">

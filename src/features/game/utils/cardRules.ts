@@ -127,6 +127,73 @@ const CLEARED_CONTEXT: TurnContext = {
   attackTarget: null,
 };
 
+// ── applyPlay helpers ─────────────────────────────────────────────────────────
+
+function removePlayedCards(
+  player: Player,
+  playedIds: Set<string>,
+): { hand: Card[]; visibleCards: Card[]; hiddenCards: Card[] } {
+  return {
+    hand: player.hand.filter(c => !playedIds.has(c.id)),
+    visibleCards: player.visibleCards.filter(c => !playedIds.has(c.id)),
+    hiddenCards: player.hiddenCards.filter(c => !playedIds.has(c.id)),
+  };
+}
+
+function buildThreeContext(
+  base: TurnContext,
+  mirrored: Card | null,
+  targetId: string | null,
+  config: RulesConfig,
+): TurnContext {
+  // Mirror the grandparent card's FULL effect forward (value + all context flags)
+  return {
+    ...base,
+    lastEffectiveCard: mirrored,
+    // 6 → carry suit constraint
+    mustFollowSuit: mirrored?.rank === '6' ? mirrored.suit : null,
+    mustFollowAboveValue:
+      mirrored?.rank === '6' ? getEffectiveValue(mirrored, config) : null,
+    // 7 → next player must still play ≤ 7
+    mustPlayBelow7: mirrored?.rank === '7',
+    // J → next player must still play a double
+    mustPlayDouble: mirrored?.rank === 'J',
+    // 8 → next player is skipped (advancement handled below)
+    skippedPlayers: mirrored?.rank === '8' ? 1 : 0,
+    // A → the player who plays the 3 chooses their own target
+    attackTarget: mirrored?.rank === 'A' ? targetId : null,
+  };
+}
+
+function computeNextIndex(
+  rank: Card['rank'],
+  isCut: boolean,
+  targetId: string | null,
+  turnContext: TurnContext,
+  players: Player[],
+  currentIndex: number,
+  cards: Card[],
+): number {
+  const n = players.length;
+
+  if (isCut) {
+    return currentIndex;
+  }
+  if (rank === 'A' && targetId !== null) {
+    const found = players.findIndex(p => p.id === targetId);
+    return found !== -1 ? found : (currentIndex + 1) % n;
+  }
+  if (rank === '3' && turnContext.lastEffectiveCard?.rank === 'A' && targetId !== null) {
+    // 3 mirrors Ace — redirect turn to the target chosen by the 3-player
+    const found = players.findIndex(p => p.id === targetId);
+    return found !== -1 ? found : (currentIndex + 1) % n;
+  }
+  // 3 mirroring an 8 propagates the skip (turnContext still holds the pre-play state)
+  const mirroredEight = rank === '3' && turnContext.lastEffectiveCard?.rank === '8';
+  const skip = rank === '8' ? cards.length : mirroredEight ? 1 : 0;
+  return (currentIndex + 1 + skip) % n;
+}
+
 /**
  * Applies a validated play and returns the next GameState.
  *
@@ -154,9 +221,8 @@ export function applyPlay(
 
   // ── 1. Remove played cards from player zones ──────────────────────────────
   const playedIds = new Set(cards.map(c => c.id));
-  const newHand = currentPlayer.hand.filter(c => !playedIds.has(c.id));
-  const newVisible = currentPlayer.visibleCards.filter(c => !playedIds.has(c.id));
-  const newHidden = currentPlayer.hiddenCards.filter(c => !playedIds.has(c.id));
+  const { hand: newHand, visibleCards: newVisible, hiddenCards: newHidden } =
+    removePlayedCards(currentPlayer, playedIds);
 
   // ── 2. Add played cards to pile ───────────────────────────────────────────
   const grownPile = [...state.pile, ...cards];
@@ -198,24 +264,8 @@ export function applyPlay(
         break;
 
       case '3': {
-        // Mirror the grandparent card's FULL effect forward (value + all context flags)
         const mirrored = turnContext.lastEffectiveCard;
-        newContext = {
-          ...base,
-          lastEffectiveCard: mirrored,
-          // 6 → carry suit constraint
-          mustFollowSuit: mirrored?.rank === '6' ? mirrored.suit : null,
-          mustFollowAboveValue:
-            mirrored?.rank === '6' ? getEffectiveValue(mirrored, config) : null,
-          // 7 → next player must still play ≤ 7
-          mustPlayBelow7: mirrored?.rank === '7',
-          // J → next player must still play a double
-          mustPlayDouble: mirrored?.rank === 'J',
-          // 8 → next player is skipped (advancement handled below)
-          skippedPlayers: mirrored?.rank === '8' ? 1 : 0,
-          // A → the player who plays the 3 chooses their own target
-          attackTarget: mirrored?.rank === 'A' ? targetId : null,
-        };
+        newContext = buildThreeContext(base, mirrored, targetId, config);
         break;
       }
 
@@ -282,23 +332,15 @@ export function applyPlay(
 
   // ── 8. Advance to next player (skip finished players) ────────────────────
   const n = state.players.length;
-  let rawNext: number;
-
-  if (isCut) {
-    rawNext = state.currentPlayerIndex;
-  } else if (rank === 'A' && targetId !== null) {
-    const found = state.players.findIndex(p => p.id === targetId);
-    rawNext = found !== -1 ? found : (state.currentPlayerIndex + 1) % n;
-  } else if (rank === '3' && turnContext.lastEffectiveCard?.rank === 'A' && targetId !== null) {
-    // 3 mirrors Ace — redirect turn to the target chosen by the 3-player
-    const found = state.players.findIndex(p => p.id === targetId);
-    rawNext = found !== -1 ? found : (state.currentPlayerIndex + 1) % n;
-  } else {
-    // 3 mirroring an 8 propagates the skip (turnContext still holds the pre-play state)
-    const mirroredEight = rank === '3' && turnContext.lastEffectiveCard?.rank === '8';
-    const skip = rank === '8' ? cards.length : mirroredEight ? 1 : 0;
-    rawNext = (state.currentPlayerIndex + 1 + skip) % n;
-  }
+  const rawNext = computeNextIndex(
+    rank,
+    isCut,
+    targetId,
+    turnContext,
+    state.players,
+    state.currentPlayerIndex,
+    cards,
+  );
 
   let nextIndex = rawNext;
   for (let i = 0; i < n; i++) {
