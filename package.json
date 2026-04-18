@@ -1,5 +1,6 @@
 {
   "homepage": "https://VirgileBernard.github.io/Danish",
+  "homepage": "https://VirgileBernard.github.io/Danish",
   "name": "danish-temp",
   "private": true,
   "version": "0.0.0",
@@ -36,6 +37,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "gh-pages": "^6.3.0",
     "globals": "^17.4.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",

@@ -1,73 +1,98 @@
-# React + TypeScript + Vite
+# 🃏 Danish
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> Jeu de cartes Danish en ligne — jouez contre des bots en attendant le tournoi annuel.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## À propos
 
-## React Compiler
+Danish est un jeu de cartes traditionnel joué en famille lors d'un tournoi annuel.
+Cette app permet de s'entraîner contre des bots en solo, avec les règles complètes du jeu.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+**Phase 1 (actuelle) :** solo vs bots  
+**Phase 2 (à venir) :** multijoueur + inscription au tournoi + fil d'actualité
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Jouer
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+🔗 **[Jouer maintenant](https://virgilbernard.github.io/Danish)** *(lien à mettre à jour après deploy)*
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Règles du jeu
+
+Chaque joueur commence avec :
+- 3 cartes cachées (face cachée)
+- 3 cartes visibles (face visible, posées sur les cachées)
+- 3 cartes en main
+
+**Objectif :** se débarrasser de toutes ses cartes en premier.
+
+### Déroulement
+- Tu dois jouer une carte de valeur **supérieure ou égale** à la dernière jouée.
+- Si tu ne peux pas jouer, tu prends **toute la pile**.
+- Vide ta main avant de toucher tes cartes visibles, puis tes cartes cachées.
+
+### Cartes spéciales
+
+| Carte | Effet |
+|-------|-------|
+| 2 | Remet la pile à 0 (pile reste en jeu) |
+| 3 | Miroir — copie la valeur de la carte précédente |
+| 4 | Carte la plus faible — impossible sur pile vide |
+| 6 | Le suivant doit jouer même couleur + valeur supérieure |
+| 7 | Le suivant doit jouer valeur ≤ 7 |
+| 8 | Passe le tour du joueur suivant |
+| 10 | Coupe la pile — le joueur rejoue sur pile vide |
+| J | Le suivant doit jouer une paire (n'importe quelle valeur) |
+| A | L'attaquant désigne un joueur — ce joueur doit jouer |
+
+### Carré automatique
+Quand 4 cartes de même valeur sont jouées consécutivement (entre plusieurs joueurs), la pile est coupée automatiquement. Le joueur qui a complété le carré rejoue.
+
+### Mode de jeu
+- **Patriarcal** (défaut) : K > Q
+- **Matriarcal** : Q > K
+
+---
+
+## Bots
+
+Trois niveaux de difficulté :
+
+- **Facile** — joue aléatoirement parmi les coups valides
+- **Moyen** — joue les cartes faibles en premier, garde les spéciales
+- **Difficile** — lit la table, cible les joueurs avancés, prépare les carrés
+
+---
+
+## Stack technique
+
+- React + Vite + TypeScript
+- TailwindCSS + Framer Motion
+- Zustand (state management)
+- Supabase (phase 2)
+
+---
+
+## Développement local
+
+```bash
+npm install
+npm run dev        # serveur de développement
+npm run test       # tests unitaires (Vitest)
+npm run build      # build de production
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Roadmap
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- [x] Moteur de jeu complet (règles + cas limites)
+- [x] Interface de jeu vs bots
+- [x] Écran de fin de partie
+- [ ] Système de thèmes (Casino · Cyberpunk · Scout)
+- [ ] Inscription au tournoi
+- [ ] Fil d'actualité communautaire
+- [ ] Multijoueur en ligne
