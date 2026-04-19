@@ -26,16 +26,16 @@ interface GameCardProps {
 
 export function GameCard({ card, state = 'normal', onClick, disabled = false }: GameCardProps) {
   const ringClass =
-    state === 'selected' ? 'ring-2 ring-green-400' :
-    state === 'optimal'  ? 'ring-2 ring-yellow-400' :
-    state === 'chosen'   ? 'ring-2 ring-blue-400' :
+    state === 'selected' ? 'ring-2 ring-amber-500 shadow-[0_0_12px_rgba(217,119,6,0.5)]' :
+    state === 'optimal'  ? 'ring-2 ring-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.4)]' :
+    state === 'chosen'   ? 'ring-2 ring-amber-700 shadow-[0_0_12px_rgba(180,83,9,0.5)]' :
     '';
 
-  const baseClass = 'w-16 h-[89px] rounded-md select-none flex-shrink-0';
+  const baseClass = 'w-16 h-[89px] rounded-md select-none flex-shrink-0 transition-all duration-150';
   const cursorClass = disabled
     ? 'opacity-50 cursor-not-allowed'
     : onClick
-    ? 'cursor-pointer hover:scale-105 transition-transform'
+    ? 'cursor-pointer hover:-translate-y-1 hover:shadow-lg'
     : '';
 
   if (state === 'empty') {
@@ -45,16 +45,26 @@ export function GameCard({ card, state = 'normal', onClick, disabled = false }: 
   }
 
   if (state === 'hidden' || card === null) {
-    const Back = cardMap['B1'];
     return (
       <div
         className={`${baseClass} ${ringClass} ${cursorClass} relative overflow-hidden`}
         onClick={disabled ? undefined : onClick}
       >
-        <Back style={{ width: '100%', height: '100%' }} />
-        {/* <div className="absolute inset-0 flex items-center justify-center">
-          <img src="/logoBC-sansTexte.png" alt="logo" className="w-8 h-8 object-contain opacity-90" />
-        </div> */}
+        {/* Ivory cream background */}
+        <div className="absolute inset-0 bg-[#e8dcc8] rounded-md" />
+        {/* Inner vintage frame with diagonal hatch */}
+        <div
+          className="absolute inset-[3px] rounded-[5px] border border-[#c4a88266]"
+          style={{ backgroundImage: 'repeating-linear-gradient(45deg,#c4a88218 0px,#c4a88218 2px,transparent 2px,transparent 8px)' }}
+        />
+        {/* Outer border */}
+        <div className="absolute inset-0 rounded-md border border-[#c4a882]" />
+        {/* Bernito Corp logo */}
+        <img
+          src="./logoBernitoCorp.svg"
+          alt=""
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 object-contain opacity-100 pointer-events-none"
+        />
       </div>
     );
   }
@@ -72,7 +82,7 @@ export function GameCard({ card, state = 'normal', onClick, disabled = false }: 
 
   return (
     <div
-      className={`${baseClass} ${ringClass} ${cursorClass} overflow-hidden`}
+      className={`${baseClass} ${ringClass} ${cursorClass} overflow-hidden shadow-[0_2px_8px_rgba(100,70,30,0.25)]`}
       onClick={disabled ? undefined : onClick}
     >
       <CardSvg className="w-full h-full" />

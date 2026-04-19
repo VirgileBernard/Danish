@@ -266,7 +266,22 @@ export function GameBoard() {
   const pileRing = (selectedCards.length > 0 || hiddenPending) && !pendingAce ? 'ring-2 ring-blue-400 animate-pulse' : '';
 
   return (
-    <div className="relative h-screen overflow-hidden bg-green-900 flex flex-col">
+    <div className="relative h-screen overflow-hidden flex flex-col" style={{ background: '#0f3d22' }}>
+      {/* ── Oval poker table ── */}
+      <div
+        className="pointer-events-none absolute"
+        style={{ top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(1100px,95vw)', height: 'min(645px,80vh)', zIndex: 0 }}
+      >
+        {/* Wood rim */}
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(ellipse at 30% 30%,#8b5a2b,#6b3a1f 60%,#3d1f0a)', boxShadow: '0 0 0 4px #8b6030,0 0 0 7px #5a3510,0 20px 80px rgba(0,0,0,0.7)' }} />
+        {/* Felt */}
+        <div style={{ position: 'absolute', inset: 22, borderRadius: '50%', background: 'radial-gradient(ellipse at 50% 35%,#1e6b3d 0%,#1a5c35 50%,#0f3d22 100%)', boxShadow: 'inset 0 4px 30px rgba(0,0,0,0.4)' }} />
+        {/* Felt weave */}
+        <div style={{ position: 'absolute', inset: 22, borderRadius: '50%', backgroundImage: 'repeating-linear-gradient(0deg,rgba(255,255,255,0.012) 0px,transparent 1px,transparent 12px),repeating-linear-gradient(90deg,rgba(255,255,255,0.012) 0px,transparent 1px,transparent 12px)', backgroundSize: '12px 12px' }} />
+        {/* Gold stripe */}
+        <div style={{ position: 'absolute', inset: 30, borderRadius: '50%', border: '1.5px solid rgba(180,140,40,0.2)' }} />
+      </div>
+
       {finishOrder.includes('human') && showEnd && <EndScreen players={players} finishOrder={finishOrder}
         humanId="human" onHide={() => setShowEnd(false)} onReplay={() => { resetGame(); startGame(human?.name ?? 'Joueur', difficulty); }} />}
       {stateHistory.length > 0 && phase === 'PLAYING' && (
@@ -274,12 +289,12 @@ export function GameBoard() {
       )}
 
       {/* ── Row 1 : Bot top — 36vh fixed ── */}
-      <div className="flex-none flex items-end justify-center pt-16 pb-2" style={{ height: '36vh' }}>
+      <div className="relative z-10 flex-none flex items-end justify-center pt-16 pb-2" style={{ height: '36vh' }}>
         <BotZone player={bot2} idx={2} />
       </div>
 
       {/* ── Row 2 : Centre — compressible, min 14vh ── */}
-      <div className="flex items-center justify-center gap-12" style={{ minHeight: '14vh', flex: '1 1 0%' }}>
+      <div className="relative z-10 flex items-center justify-center gap-12" style={{ minHeight: '14vh', flex: '1 1 0%' }}>
         <BotZone player={bot1} idx={1} />
         <div className="relative flex flex-col items-center gap-2">
           <div className="flex items-center gap-6">
@@ -308,7 +323,7 @@ export function GameBoard() {
       </div>
 
       {/* ── Row 3 : Human player zone — shrink-wraps content, no fixed height ── */}
-      <div className="flex-none flex flex-col items-center justify-start pt-2 overflow-visible">
+      <div className="relative z-10 flex-none flex flex-col items-center justify-start pt-2 overflow-visible">
         <div className="relative flex flex-col items-center gap-2 overflow-visible">
           <Bubble id="human" />
           <PlayerZone player={human} isCurrentPlayer={currentPlayerIndex === 0} isHuman={true}
@@ -320,7 +335,7 @@ export function GameBoard() {
       </div>
 
       {/* ── Row 4 : Bottom bar — prep panel left · emotes + log right ── */}
-      <div className="flex-none flex items-end justify-between px-4 pb-3" style={{ height: '10vh' }}>
+      <div className="relative z-10 flex-none flex items-end justify-between px-4 pb-3" style={{ height: '10vh' }}>
         {/* Prep panel — bottom-left, visible only during PREPARATION */}
         <div className="flex items-end ml-[30vw] mb-[15vh]" style={{ width: 220 }}>
           {isPreparing && (
