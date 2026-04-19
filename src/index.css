@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Playfair+Display:ital,wght@0,700;1,400&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,13 +7,14 @@
 :root {
   --font-title: 'Fraunces', serif;
   --font-body: 'Montserrat', sans-serif;
+  --font-card: 'Playfair Display', serif;
 
   --color-primary-mauve: hsl(281, 95%, 44%);
   --color-primary-orange: hsl(37, 100%, 57%);
   --color-card-rules: #166534;
-  --color-card-play-easy: #fca5a5;
-  --color-card-play-medium: #dc2626;
-  --color-card-play-hard: #7f1d1d;
+  --color-card-play-easy: hsl(0, 100%, 50%);
+  --color-card-play-medium: hsl(0, 100%, 50%);
+  --color-card-play-hard: hsl(0, 85%, 23%);
   --color-card-who: #c2410c;
   --color-card-profil: #1e40af;
 }
