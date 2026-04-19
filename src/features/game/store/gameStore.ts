@@ -155,6 +155,7 @@ interface GameStore {
   sendEmote: (playerId: string, emote: string) => void;
   setDebugMode: (v: boolean) => void;
   setRulesMode: (mode: RulesConfig['mode']) => void;
+  setDifficulty: (d: BotDifficulty) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -431,6 +432,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   setDebugMode: (v) => set({ isDebugMode: v }),
+  setDifficulty: (d) => set({ difficulty: d }),
 
   /**
    * Updates the rules mode (patriarchal ↔ matriarchal) during PREPARATION.
