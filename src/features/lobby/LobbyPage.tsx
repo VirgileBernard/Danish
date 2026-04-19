@@ -10,9 +10,9 @@ const DIFFICULTY_LEVELS: { label: string; value: BotDifficulty; desc: string }[]
 ];
 
 const DIFFICULTY_BG: Record<BotDifficulty, string> = {
-  easy:   'hsl(0, 85%, 75%)',
-  medium: 'hsl(0, 85%, 50%)',
-  hard:    'hsl(0, 85%, 23%)',
+  easy:   'hsl(27, 64%, 52%)',
+  medium: 'hsl(27, 81%, 43%)',
+  hard:    'hsl(0, 81%, 43%)',
 };
 
 const DIFFICULTY_TEXT: Record<BotDifficulty, string> = {
