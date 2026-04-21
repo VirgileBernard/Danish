@@ -16,7 +16,7 @@ Cette app permet de s'entraîner contre des bots en solo, avec les règles compl
 
 ## Jouer
 
-🔗 **[Jouer maintenant](https://virgilebernard.github.io/Danish/)**
+🔗 **[Jouer maintenant](https://VirgileBernard.github.io/Danish/)**
 
 ---
 
