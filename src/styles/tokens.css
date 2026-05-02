@@ -30,6 +30,9 @@
   --accent: var(--dwc-turquoise);
   --ring: var(--dwc-mauve);
   --shadow-color: 0 0% 0% / 0.5;
+/* glow autour du logo */
+--glow-primary: 230 53% 64% / 0.3;
+--glow-accent: 153 80% 57% / 0.15;
 }
 
 /* ── Mode light: on override seulement les sémantiques ── */
@@ -49,4 +52,7 @@
   --accent: var(--dwc-turquoise);
   --ring:  var(--dwc-mauve);
   --shadow-color: 0 0% 0% / 0.5;
+  /* glow autour du logo */
+  --glow-primary: 230 53% 54% / 0.5;
+ --glow-accent: 153 65% 42% / 0.25;
 }

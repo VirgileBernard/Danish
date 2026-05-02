@@ -18,7 +18,7 @@ export function Hero() {
             {/* Badge avec point pulsant */}
             <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 mb-8 rounded-full border border-[hsl(var(--border))] text-xs text-[hsl(var(--foreground-secondary))]">
               <span className="w-2 h-2 rounded-full bg-[hsl(var(--accent))] animate-pulse" />
-              Tournoi en cours · Édition 2026
+              Tournoi incoming · Édition 2026
             </div>
 
             {/* Titre */}
@@ -27,7 +27,9 @@ export function Hero() {
               style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)' }}
             >
               <span className="block">Danish</span>
-              <span className="block text-[hsl(var(--accent))]">World</span>
+              <span className="block bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--accent))] bg-clip-text text-transparent">
+                World
+              </span>
               <span className="block">Championship</span>
             </h1>
 
@@ -78,12 +80,12 @@ export function Hero() {
           {/* COLONNE DROITE — VIDÉO */}
           <div className="flex items-center justify-center order-first md:order-last">
             <div className="relative aspect-square w-full max-w-[480px] flex items-center justify-center">
-              {/* Glow ring animé en arrière-plan */}
+              {/* Glow ring : utilise --glow-primary défini dans tokens.css */}
               <div
-                className="absolute inset-0 rounded-full animate-pulse"
+                className="absolute inset-0 rounded-full animate-pulse blur-2xl"
                 style={{
                   background:
-                    'radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.18) 0%, hsl(var(--accent) / 0.08) 50%, transparent 70%)',
+                    'radial-gradient(circle at 50% 50%, hsl(var(--glow-primary)) 0%, hsl(var(--glow-accent)) 50%, transparent 70%)',
                 }}
               />
               {/* Vidéo */}
