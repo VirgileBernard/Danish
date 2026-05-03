@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { MobileDrawer } from './MobileDrawer';
-import logoDwc from '../../../assets/logo-DWCV1.png';
+import logoDwc from '@/assets/logo-DWCV1.png';
 
 const NAV_LINKS = [
   { label: 'Règles', href: '#' },

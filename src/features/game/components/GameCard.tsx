@@ -1,5 +1,6 @@
 import * as Cards from '@letele/playing-cards';
 import type { Card } from '@/features/game/utils/types';
+import logoBernitoCorp from '@/assets/logoBernitoCorp.svg';
 
 // Maps our suit/rank to the @letele/playing-cards component name
 function getCardComponentName(card: Card): string {
@@ -61,7 +62,7 @@ export function GameCard({ card, state = 'normal', onClick, disabled = false }: 
         <div className="absolute inset-0 rounded-md border border-[#c4a882]" />
         {/* Bernito Corp logo */}
         <img
-          src="./logoBernitoCorp.svg"
+          src={logoBernitoCorp}
           alt=""
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 object-contain opacity-100 pointer-events-none"
         />
