@@ -1,7 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { GameBoard } from '@/features/game/components/GameBoard';
 import { MemberCard } from '@/features/game/components/MemberCard';
-import { LobbyPage } from '@/features/lobby/LobbyPage';
+import { LandingPage } from '@/features/landing/LandingPage';
 import { useGameStore } from '@/features/game/store/gameStore';
 
 const DebugPage = import.meta.env.DEV ? lazy(() => import('@/features/game/components/DebugPage').then(m => ({ default: m.DebugPage }))) : null;
@@ -38,7 +38,7 @@ function App() {
   if (cleanPath === '/profile') return <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4"><MemberCard /></div>;
   if (cleanPath === '/debug' && DebugPage) return <Suspense fallback={null}><DebugPage /></Suspense>;
 
-  return <LobbyPage onNavigate={navigate} />;
+  return <LandingPage onNavigate={navigate} />;
 }
 
 export default App;

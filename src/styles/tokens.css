@@ -1,0 +1,58 @@
+
+:root {
+  /* ── Couche 1: Tokens primitifs (palette de marque) ── */
+  /* Ces valeurs ne changent JAMAIS selon le thème */
+  --dwc-mauve:230 53% 64%; 
+  --dwc-turquoise: 153 80% 57%;  
+  --dwc-grey-blue: 223 22% 67%;   
+
+  /* ── Couche 2: Typographie ── */
+  --font-sans: "Inter", sans-serif;      
+  --font-display: "Montserrat", sans-serif;   
+  /* --font-mono: "Fraunces", serif;      */
+  
+  /* ── Couche 2: Rayons & autres ── */
+  --radius: 0.5rem;
+
+  /* ── Couche 3: Tokens sémantiques (DARK par défaut) ── */
+  --background: 0 0% 0%;
+  --background-dark: 0 0% 10%;
+  --background-light: 0 0% 15%;
+  --foreground: 0 0% 99%;
+  --foreground-secondary: 0 0% 85%;
+  --foreground-muted: 0 0% 70%;
+  --foreground-contrast: 0 0% 10%;
+  --card: 0 0% 15%;
+  /* --card-foreground: 0 0% 95%; pas pour l'instant, on verra si besoin */
+  --border: 0 0% 30%;
+  --primary: var(--dwc-mauve);
+  --primary-foreground: 0 0% 99%;
+  --accent: var(--dwc-turquoise);
+  --ring: var(--dwc-mauve);
+  --shadow-color: 0 0% 0% / 0.5;
+/* glow autour du logo */
+--glow-primary: 230 53% 64% / 0.3;
+--glow-accent: 153 80% 57% / 0.15;
+}
+
+/* ── Mode light: on override seulement les sémantiques ── */
+[data-theme="light"] {
+  --background: 0 0% 96%;
+  --background-dark: 0 0% 92%;
+  --background-light: 0 0% 99%;
+  --foreground: 0 0% 5%;
+  --foreground-secondary: 0 0% 25%;
+  --foreground-muted: 0 0% 45%;
+  --foreground-contrast: 0 0% 90%;
+  --card: 0 0% 100%;
+  /* --card-foreground: 0 0% 5%; pas encore utilisé, on verra si besoin */
+  --border: 0 0% 45%;
+  --primary: 230 53% 54%;   /* mauve un peu plus sombre pr un meilleur contraste sur fond clair */
+  --primary-foreground: 0 0% 99%;
+  --accent: var(--dwc-turquoise);
+  --ring:  var(--dwc-mauve);
+  --shadow-color: 0 0% 0% / 0.5;
+  /* glow autour du logo */
+  --glow-primary: 230 53% 54% / 0.5;
+ --glow-accent: 153 65% 42% / 0.25;
+}
