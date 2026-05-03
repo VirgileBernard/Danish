@@ -42,7 +42,7 @@ export function Hero() {
             {/* Actions */}
             <div className="flex flex-wrap items-center gap-3">
               <a
-                href="#"
+                href="/Danish/game"
                 className="
                   inline-flex items-center gap-2
                   bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]
@@ -54,7 +54,9 @@ export function Hero() {
                   shadow-lg shadow-[hsl(var(--primary)/0.25)]
                 "
               >
+        
                 <Play size={16} fill="currentColor" />
+
                 Jouer maintenant
               </a>
               <a
