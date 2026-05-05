@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@letele/playing-cards": "^0.1.0",
-    "@supabase/supabase-js": "^2.102.1",
+    "@supabase/supabase-js": "^2.105.3",
     "autoprefixer": "^10.4.27",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.38.0",
