@@ -51,6 +51,10 @@ h1, h2, h3, h4, h5, h6 {
   border-color: hsl(var(--accent) / 0.45);
   color: hsl(var(--accent));
 }
+[data-mode='signup'] .submit-btn:hover {
+  background: hsl(var(--accent) / 0.25);
+  box-shadow: 0 0 16px hsl(var(--accent) / 0.2);
+}
 
 [data-mode='signup'].card-container{
   border-top: 2px solid hsl(var(--accent));
